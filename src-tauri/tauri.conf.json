@@ -22,12 +22,18 @@
     ],
     "security": {
       "csp": "default-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: https: http:; font-src 'self' data:",
-      "assetProtocol": { "enable": true, "scope": [] }
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "nsis"],
+    "targets": [
+      "deb",
+      "nsis"
+    ],
     "category": "Productivity",
     "shortDescription": "A minimal WYSIWYG markdown editor",
     "icon": [
@@ -36,6 +42,38 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Kim Trønnes",
+    "copyright": "© 2026 Kim Trønnes",
+    "homepage": "https://github.com/troennes/tyset",
+    "longDescription": "Tyset is a small WYSIWYG markdown editor in the spirit of Typora: live preview, tables, accordions, auto-save with local history, and HTML/PDF export. Files stay plain GitHub-flavoured markdown.",
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Markdown document",
+        "description": "Markdown document",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      }
+    ],
+    "linux": {
+      "deb": {
+        "section": "editors",
+        "desktopTemplate": "tyset.desktop"
+      }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "startMenuFolder": "Tyset"
+      }
+    },
+    "license": "MIT"
   }
 }

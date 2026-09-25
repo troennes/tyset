@@ -150,7 +150,8 @@ count, rich-text paste, tabs, auto-updater.
 
 ## Status
 
-- Milestones 1–6 are done.
+- Milestones 1–7 are done. The Windows installer is built by CI only; it hasn't been
+  tested by hand yet.
 - Settings: `settings.json` in the app config dir (Linux: `~/.config/no.troennes.tyset/`).
   Local history: `history/` in the app data dir (Linux: `~/.local/share/no.troennes.tyset/`),
   at most one snapshot per file every 5 minutes, 50 kept per file.
