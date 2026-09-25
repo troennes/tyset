@@ -3,11 +3,21 @@ import "./styles.css";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { EditorView } from "@codemirror/view";
 
-import { importImageFile, initialPath, listTree, onFsChange, pasteClipboardImage, watchFolder } from "./api";
+import {
+  createFile,
+  importImageFile,
+  initialPath,
+  listTree,
+  newWindow,
+  onFsChange,
+  pasteClipboardImage,
+  watchDocument,
+  watchFolder,
+} from "./api";
 import { Doc } from "./document";
 import {
   type EditorHost,
@@ -17,9 +27,13 @@ import {
   loadDocument,
   openFind,
   replaceDocument,
+  restoreText,
   setSourceMode,
 } from "./editor";
+import { HistoryDialog } from "./history";
+import { Outline } from "./outline";
 import { baseName, dirName, isAbsolute, resolve } from "./paths";
+import { type Settings, flushSettings, loadSettings, settings, updateSettings } from "./settings";
 import { FileTree } from "./tree";
 
 const MARKDOWN_EXTENSIONS = ["md", "markdown", "txt"];
@@ -27,12 +41,16 @@ const DOCUMENT_FILE = /\.(md|markdown|txt)$/i;
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const TREE_REFRESH_DELAY_MS = 200;
+/** Windows opened with Ctrl+Shift+N start empty instead of restoring the last folder. */
+const BLANK_WINDOW = new URLSearchParams(location.search).has("blank");
 
 const appWindow = getCurrentWindow();
 const shell = document.querySelector<HTMLElement>(".shell")!;
 const folderName = document.getElementById("folder-name")!;
 const status = document.getElementById("save-state")!;
 const modeLabel = document.getElementById("mode")!;
+const themeButton = document.getElementById("theme-toggle") as HTMLButtonElement;
+const historyButton = document.getElementById("history-button") as HTMLButtonElement;
 
 let folder: string | null = null;
 let doc: Doc | null = null;
@@ -41,6 +59,10 @@ let treeTimer: number | undefined;
 
 const host: EditorHost = {
   onChange: () => doc?.changed(),
+  onViewUpdate: (update) => {
+    if (update.docChanged) outline.schedule();
+    else outline.markCurrent();
+  },
   openLink: (href) => void openLink(href),
   pasteImage: async () => {
     if (!doc) return null;
@@ -60,6 +82,11 @@ const host: EditorHost = {
 };
 const view: EditorView = createEditor(document.getElementById("editor")!, host);
 const tree = new FileTree(document.getElementById("tree")!, (path) => void openFile(path));
+const outline = new Outline(document.getElementById("outline")!, view);
+const history = new HistoryDialog((text) => {
+  restoreText(view, text); // an ordinary edit: Ctrl+Z undoes it
+  view.focus();
+});
 
 // --- Folder and file handling -------------------------------------------------
 
@@ -70,7 +97,7 @@ async function openFolder(path: string): Promise<void> {
   lastTreeJson = "";
   await refreshTree();
   await watchFolder(path);
-  remember("folder", path);
+  updateSettings({ folder: path });
 }
 
 async function refreshTree(): Promise<void> {
@@ -99,9 +126,13 @@ async function openFile(path: string): Promise<void> {
     return;
   }
   shell.classList.add("has-doc");
+  historyButton.hidden = false;
   tree.setCurrent(path);
+  outline.refresh();
   renderState(doc);
-  remember("file", path);
+  updateSettings({ file: path });
+  // The folder watcher covers files inside it; watch anything else separately.
+  void watchDocument(folder && isInside(path, folder) ? null : path).catch(() => undefined);
   view.focus();
 }
 
@@ -110,10 +141,30 @@ onFsChange(async ({ paths }) => {
   treeTimer = window.setTimeout(() => void refreshTree(), TREE_REFRESH_DELAY_MS);
   if (doc && paths.includes(doc.path)) {
     const current = doc;
-    const text = await current.externalChange();
-    if (text !== null && doc === current) replaceDocument(view, text, host);
+    const change = await current.externalChange();
+    if (doc !== current || !change) return;
+    if (change.kind === "reload") replaceDocument(view, change.text, host);
+    else showError(`${current.name} was deleted outside Tyset. Your text is still here; editing saves it again.`);
   }
 });
+
+// --- New files and windows -------------------------------------------------------
+
+async function newFile(): Promise<void> {
+  const dir = folder ?? (doc ? dirName(doc.path) : undefined);
+  const path = await save({
+    defaultPath: dir ? resolve(dir, "Untitled.md") : "Untitled.md",
+    filters: [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
+  });
+  if (!path) return;
+  try {
+    await createFile(path);
+  } catch (e) {
+    showError(`Could not create ${path}: ${e}`);
+    return;
+  }
+  await openFile(path);
+}
 
 // --- Links and images -----------------------------------------------------------
 
@@ -168,6 +219,72 @@ function showError(message: string): void {
   status.classList.add("error");
 }
 
+// --- Sidebar, theme and modes ---------------------------------------------------
+
+function showSidebarTab(tab: Settings["sidebarTab"], remember = true): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-tab]")) {
+    if (button.dataset.tab === tab) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+  for (const panel of document.querySelectorAll<HTMLElement>("[data-panel]")) {
+    panel.hidden = panel.dataset.panel !== tab;
+  }
+  if (remember) updateSettings({ sidebarTab: tab });
+}
+
+document.querySelector(".tabs")!.addEventListener("click", (e) => {
+  const tab = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-tab]")?.dataset.tab;
+  if (tab === "files" || tab === "outline") showSidebarTab(tab);
+});
+
+function setSidebar(visible: boolean): void {
+  shell.classList.toggle("no-sidebar", !visible);
+  updateSettings({ sidebar: visible });
+}
+
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+function effectiveTheme(): "light" | "dark" {
+  return settings().theme ?? (systemDark.matches ? "dark" : "light");
+}
+
+/** minium switches colours on `html[data-theme]`; no attribute follows the system. */
+function applyTheme(theme: Settings["theme"]): void {
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  void appWindow.setTheme(theme).catch(() => undefined); // native title bar to match
+  const dark = effectiveTheme() === "dark";
+  themeButton.textContent = dark ? "☀" : "☾";
+  themeButton.title = dark ? "Switch to light mode" : "Switch to dark mode";
+}
+
+function toggleTheme(): void {
+  const theme = effectiveTheme() === "dark" ? "light" : "dark";
+  updateSettings({ theme });
+  applyTheme(theme);
+}
+
+themeButton.addEventListener("click", toggleTheme);
+systemDark.addEventListener("change", () => applyTheme(settings().theme));
+
+function toggleSourceMode(): void {
+  setSourceMode(view, host, !isSourceMode());
+  renderMode();
+  updateSettings({ sourceMode: isSourceMode() });
+}
+
+function renderMode(): void {
+  modeLabel.textContent = isSourceMode() ? "Source" : "";
+}
+
+historyButton.addEventListener("click", () => void openHistory());
+
+async function openHistory(): Promise<void> {
+  if (!doc) return;
+  await doc.save(); // so the list is up to date with what's on disk
+  await history.open(doc.path, doc.name);
+}
+
 // --- Commands -----------------------------------------------------------------
 
 async function pickFolder(): Promise<void> {
@@ -185,16 +302,6 @@ async function pickFile(): Promise<void> {
 
 document.getElementById("open-folder")!.addEventListener("click", () => void pickFolder());
 
-function toggleSourceMode(): void {
-  setSourceMode(view, host, !isSourceMode());
-  renderMode();
-  remember("sourceMode", String(isSourceMode()));
-}
-
-function renderMode(): void {
-  modeLabel.textContent = isSourceMode() ? "Source" : "";
-}
-
 // App-wide shortcuts. Capture phase so they win over the editor's own keymap
 // and also work while the sidebar has focus.
 window.addEventListener(
@@ -206,7 +313,9 @@ window.addEventListener(
       key === "s" && !e.shiftKey ? () => doc?.save()
       : key === "o" && !e.shiftKey ? pickFile
       : key === "o" && e.shiftKey ? pickFolder
-      : key === "l" && e.shiftKey ? () => shell.classList.toggle("no-sidebar")
+      : key === "n" && !e.shiftKey ? newFile
+      : key === "n" && e.shiftKey ? newWindow
+      : key === "l" && e.shiftKey ? () => setSidebar(shell.classList.contains("no-sidebar"))
       : key === "f" && !e.shiftKey && doc ? () => openFind(view, false)
       : key === "h" && !e.shiftKey && doc ? () => openFind(view, true)
       // "/" is Shift+7 on Nordic layouts, so Shift is allowed here.
@@ -223,7 +332,7 @@ window.addEventListener(
 // Never lose edits: save when the window loses focus and before it closes.
 window.addEventListener("blur", () => void doc?.save());
 void appWindow.onCloseRequested(async (event) => {
-  await doc?.save();
+  await Promise.all([doc?.save(), flushSettings()]);
   if (doc?.state !== "error") return;
   const close = await ask(`Could not save ${doc.name}: ${doc.error}\n\nClose anyway and lose your edits?`, {
     title: "Unsaved changes",
@@ -237,45 +346,36 @@ void appWindow.onCloseRequested(async (event) => {
 // --- Startup ------------------------------------------------------------------
 
 async function start(): Promise<void> {
-  if (recall("sourceMode") === "true") setSourceMode(view, host, true);
+  const saved = await loadSettings();
+  applyTheme(saved.theme);
+  shell.classList.toggle("no-sidebar", !saved.sidebar);
+  showSidebarTab(saved.sidebarTab, false);
+  if (saved.sourceMode) setSourceMode(view, host, true);
   renderMode();
+  if (BLANK_WINDOW) return;
+
   const cliPath = await initialPath();
   if (cliPath) {
     await openFolder(dirName(cliPath));
     await openFile(cliPath);
     return;
   }
-  const lastFolder = recall("folder");
-  if (lastFolder) await openFolder(lastFolder).catch(() => undefined);
-  const lastFile = recall("file");
-  if (lastFile) await openFile(lastFile);
+  if (saved.folder) await openFolder(saved.folder).catch(() => undefined);
+  if (saved.file) await openFile(saved.file);
 }
 
 void start();
 
 // --- Helpers ------------------------------------------------------------------
 
+function isInside(path: string, dir: string): boolean {
+  return path.startsWith(dir) && /[\\/]/.test(path.charAt(dir.length));
+}
+
 function safeDecode(text: string): string {
   try {
     return decodeURI(text);
   } catch {
     return text;
-  }
-}
-
-// Per-window conveniences only; real settings arrive in milestone 4.
-function remember(key: string, value: string): void {
-  try {
-    localStorage.setItem(`tyset.${key}`, value);
-  } catch {
-    /* storage unavailable */
-  }
-}
-
-function recall(key: string): string | null {
-  try {
-    return localStorage.getItem(`tyset.${key}`);
-  } catch {
-    return null;
   }
 }

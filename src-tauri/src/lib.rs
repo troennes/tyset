@@ -1,26 +1,28 @@
+//! Tauri commands: the page's only access to files, the clipboard and windows.
+
 mod assets;
 mod files;
+mod history;
+mod watch;
 
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use serde::Serialize;
+use notify::RecommendedWatcher;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 use files::TreeNode;
 
 #[derive(Default)]
 struct AppState {
-    /// One folder watcher per window, keyed by window label.
-    watchers: Mutex<HashMap<String, RecommendedWatcher>>,
+    /// Per window label: the open folder's watcher, and one for a document outside it.
+    folder_watchers: Mutex<HashMap<String, RecommendedWatcher>>,
+    document_watchers: Mutex<HashMap<String, RecommendedWatcher>>,
     /// File passed on the command line; handed out once to the first window.
     initial_path: Mutex<Option<String>>,
-}
-
-#[derive(Serialize, Clone)]
-struct FsChange {
-    paths: Vec<String>,
+    windows_opened: AtomicUsize,
 }
 
 type CommandResult<T> = Result<T, String>;
@@ -29,6 +31,8 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+// --- Files --------------------------------------------------------------------
+
 #[tauri::command]
 fn list_tree(root: String) -> CommandResult<Vec<TreeNode>> {
     files::list_tree(Path::new(&root)).map_err(err)
@@ -36,13 +40,104 @@ fn list_tree(root: String) -> CommandResult<Vec<TreeNode>> {
 
 #[tauri::command]
 fn read_file(app: AppHandle, path: String) -> CommandResult<String> {
-    let contents = std::fs::read_to_string(&path).map_err(err)?;
+    let contents = fs::read_to_string(&path).map_err(err)?;
     // Let the page show images stored beside the document.
     if let Some(dir) = Path::new(&path).parent() {
         allow_assets(&app, dir);
     }
     Ok(contents)
 }
+
+/// Write atomically, first keeping the previous contents in local history.
+#[tauri::command]
+fn write_file(app: AppHandle, path: String, contents: String) -> CommandResult<()> {
+    let path = Path::new(&path);
+    if let (Ok(old), Some(root)) = (fs::read(path), history_root(&app)) {
+        if old != contents.as_bytes() {
+            // History is a safety net: never fail a save because of it.
+            let _ = history::snapshot(&root, &canonical(path), &old);
+        }
+    }
+    files::atomic_write(path, contents.as_bytes()).map_err(err)
+}
+
+/// Create an empty file, or leave an existing one untouched.
+#[tauri::command]
+fn create_file(path: String) -> CommandResult<()> {
+    match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(err(e)),
+    }
+}
+
+#[tauri::command]
+fn path_exists(path: String) -> bool {
+    Path::new(&path).exists()
+}
+
+#[tauri::command]
+fn initial_path(state: State<AppState>) -> Option<String> {
+    state.initial_path.lock().unwrap().take()
+}
+
+// --- Local history --------------------------------------------------------------
+
+fn history_root(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("history"))
+}
+
+/// History is keyed by the real path, so a file reached via a symlink shares it.
+fn canonical(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+#[tauri::command]
+fn list_history(app: AppHandle, path: String) -> CommandResult<Vec<history::Snapshot>> {
+    let root = history_root(&app).ok_or("no app data directory")?;
+    history::list(&root, &canonical(Path::new(&path))).map_err(err)
+}
+
+#[tauri::command]
+fn read_history(app: AppHandle, path: String, id: String) -> CommandResult<String> {
+    let root = history_root(&app).ok_or("no app data directory")?;
+    history::read(&root, &canonical(Path::new(&path)), &id).map_err(err)
+}
+
+// --- Settings -----------------------------------------------------------------
+
+fn settings_path(app: &AppHandle) -> CommandResult<PathBuf> {
+    Ok(app.path().app_config_dir().map_err(err)?.join("settings.json"))
+}
+
+/// The settings object; its shape is owned by the frontend (`src/settings.ts`).
+#[tauri::command]
+fn load_settings(app: AppHandle) -> CommandResult<serde_json::Value> {
+    match fs::read_to_string(settings_path(&app)?) {
+        Ok(text) => Ok(serde_json::from_str(&text).unwrap_or_default()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Value::Null),
+        Err(e) => Err(err(e)),
+    }
+}
+
+/// Merge `changes` (top-level keys) into the stored settings. Merging rather than
+/// replacing keeps one window from undoing another window's changes.
+#[tauri::command]
+fn update_settings(app: AppHandle, changes: serde_json::Map<String, serde_json::Value>) -> CommandResult<()> {
+    let path = settings_path(&app)?;
+    let mut settings = match load_settings(app)? {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    settings.extend(changes);
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(err)?;
+    }
+    let text = serde_json::to_string_pretty(&settings).map_err(err)?;
+    files::atomic_write(&path, text.as_bytes()).map_err(err)
+}
+
+// --- Images -------------------------------------------------------------------
 
 /// Link an image file (e.g. dropped on the window) from `doc`, copying it into
 /// `assets/` unless it is already inside the document's folder.
@@ -62,82 +157,48 @@ fn paste_clipboard_image(doc: String) -> CommandResult<Option<String>> {
     let mut clipboard = arboard::Clipboard::new().map_err(err)?;
     let Ok(image) = clipboard.get_image() else { return Ok(None) };
     let png = assets::encode_png(image.width as u32, image.height as u32, &image.bytes).map_err(err)?;
-    let name = format!("image-{}.png", timestamp());
+    let name = format!("image-{}.png", assets::timestamp());
     assets::import_bytes(Path::new(&doc), &name, &png).map(Some).map_err(err)
-}
-
-/// UTC `YYYYMMDD-HHMMSS`, for naming pasted images.
-fn timestamp() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format_timestamp(secs)
-}
-
-fn format_timestamp(secs: u64) -> String {
-    let (days, rem) = (secs / 86_400, secs % 86_400);
-    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
-    let z = days as i64 + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}{month:02}{day:02}-{:02}{:02}{:02}", rem / 3600, rem % 3600 / 60, rem % 60)
 }
 
 fn allow_assets(app: &AppHandle, dir: &Path) {
     let _ = app.asset_protocol_scope().allow_directory(dir, true);
 }
 
-#[tauri::command]
-fn write_file(path: String, contents: String) -> CommandResult<()> {
-    files::atomic_write(Path::new(&path), contents.as_bytes()).map_err(err)
-}
+// --- Watching and windows -------------------------------------------------------
 
-#[tauri::command]
-fn initial_path(state: State<AppState>) -> Option<String> {
-    state.initial_path.lock().unwrap().take()
-}
-
-/// Watch `root` recursively and emit `fs-change` to the calling window.
-/// Replaces any folder this window was watching before.
+/// Watch `root` recursively for the calling window, replacing its previous folder.
 #[tauri::command]
 fn watch_folder(window: WebviewWindow, state: State<AppState>, root: String) -> CommandResult<()> {
-    let label = window.label().to_string();
-    let root_path = PathBuf::from(&root);
-    allow_assets(window.app_handle(), &root_path);
-    let target = window.clone();
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        let Ok(event) = res else { return };
-        if matches!(event.kind, EventKind::Access(_)) {
-            return;
-        }
-        let paths: Vec<String> = event
-            .paths
-            .iter()
-            .filter(|p| !is_hidden(&root_path, p))
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect();
-        if !paths.is_empty() {
-            let _ = target.emit_to(target.label(), "fs-change", FsChange { paths });
-        }
-    })
-    .map_err(err)?;
-    watcher.watch(Path::new(&root), RecursiveMode::Recursive).map_err(err)?;
-    state.watchers.lock().unwrap().insert(label, watcher);
+    let root = PathBuf::from(root);
+    allow_assets(window.app_handle(), &root);
+    let watcher = watch::watch(&window, &root, true).map_err(err)?;
+    state.folder_watchers.lock().unwrap().insert(window.label().to_string(), watcher);
     Ok(())
 }
 
-/// True for paths inside hidden entries (e.g. `.git/`, our own temp files).
-fn is_hidden(root: &Path, path: &Path) -> bool {
-    path.strip_prefix(root)
-        .map(|rel| rel.components().any(|c| c.as_os_str().to_string_lossy().starts_with('.')))
-        .unwrap_or(false)
+/// Watch the folder of a document that is outside the open folder (`None` stops).
+#[tauri::command]
+fn watch_document(window: WebviewWindow, state: State<AppState>, path: Option<String>) -> CommandResult<()> {
+    let mut watchers = state.document_watchers.lock().unwrap();
+    watchers.remove(window.label());
+    let Some(dir) = path.as_deref().and_then(|p| Path::new(p).parent()) else { return Ok(()) };
+    let watcher = watch::watch(&window, dir, false).map_err(err)?;
+    watchers.insert(window.label().to_string(), watcher);
+    Ok(())
+}
+
+/// Open an empty window. Async: creating windows from a sync command can deadlock on Windows.
+#[tauri::command]
+async fn new_window(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+    let n = state.windows_opened.fetch_add(1, Ordering::Relaxed) + 1;
+    WebviewWindowBuilder::new(&app, format!("window-{n}"), WebviewUrl::App("index.html?blank".into()))
+        .title("Tyset")
+        .inner_size(1100.0, 760.0)
+        .min_inner_size(480.0, 320.0)
+        .build()
+        .map_err(err)?;
+    Ok(())
 }
 
 fn cli_path() -> Option<String> {
@@ -155,39 +216,27 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::Destroyed = event {
                 let state = window.state::<AppState>();
-                state.watchers.lock().unwrap().remove(window.label());
+                state.folder_watchers.lock().unwrap().remove(window.label());
+                state.document_watchers.lock().unwrap().remove(window.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
             list_tree,
             read_file,
             write_file,
-            watch_folder,
+            create_file,
+            path_exists,
             initial_path,
+            list_history,
+            read_history,
+            load_settings,
+            update_settings,
             import_image_file,
-            paste_clipboard_image
+            paste_clipboard_image,
+            watch_folder,
+            watch_document,
+            new_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tyset");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn timestamps() {
-        assert_eq!(format_timestamp(0), "19700101-000000");
-        assert_eq!(format_timestamp(951_782_400), "20000229-000000"); // leap day
-        assert_eq!(format_timestamp(1_790_330_696), "20260925-100456");
-        assert_eq!(timestamp().len(), 15);
-    }
-
-    #[test]
-    fn hidden_paths_are_relative_to_root() {
-        let root = Path::new("/home/me/.notes");
-        assert!(!is_hidden(root, Path::new("/home/me/.notes/a.md")));
-        assert!(is_hidden(root, Path::new("/home/me/.notes/.git/HEAD")));
-        assert!(is_hidden(root, Path::new("/home/me/.notes/.a.md.tyset-tmp")));
-    }
 }

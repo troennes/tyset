@@ -1,8 +1,11 @@
 // One open document: its path, what is known to be on disk, and auto-save.
 import { ask } from "@tauri-apps/plugin-dialog";
-import { readFile, writeFile } from "./api";
+import { pathExists, readFile, writeFile } from "./api";
 
 const AUTOSAVE_DELAY_MS = 1000;
+
+/** What an external change means for the editor. */
+export type ExternalChange = { kind: "reload"; text: string } | { kind: "deleted" } | null;
 
 export type SaveState = "saved" | "pending" | "saving" | "error";
 
@@ -77,15 +80,15 @@ export class Doc {
   }
 
   /**
-   * The file changed on disk. Returns the new contents if the editor should
-   * reload them, or null if the change can be ignored (e.g. our own write).
+   * The file changed on disk: new contents to load, a deletion (the editor keeps
+   * its text), or null when there is nothing to do (e.g. it was our own write).
    */
-  async externalChange(): Promise<string | null> {
+  async externalChange(): Promise<ExternalChange> {
     if (this.prompting) return null;
     await this.writing;
     const disk = await readFile(this.path).catch(() => null);
-    // Deleted/unreadable (keep the editor contents), or just our own write.
-    if (disk === null || disk === this.onDisk) return null;
+    if (disk === null) return (await pathExists(this.path)) ? null : { kind: "deleted" };
+    if (disk === this.onDisk) return null; // our own write
     if (!this.dirty) return this.reloaded(disk);
 
     // Hold auto-save while asking: the dialog itself blurs the window.
@@ -107,11 +110,11 @@ export class Doc {
     }
   }
 
-  private reloaded(disk: string): string {
+  private reloaded(disk: string): ExternalChange {
     this.onDisk = disk;
     window.clearTimeout(this.timer);
     this.setState("saved");
-    return disk;
+    return { kind: "reload", text: disk };
   }
 
   private setState(state: SaveState): void {

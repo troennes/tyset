@@ -13,10 +13,45 @@
           <strong id="folder-name">No folder</strong>
           <button class="tertiary small" id="open-folder" title="Open folder (Ctrl+Shift+O)">Open…</button>
         </header>
-        <nav aria-label="Files" id="tree"></nav>
+        <nav class="tabs" aria-label="Sidebar">
+          <ul>
+            <li><button type="button" data-tab="files" aria-current="page">Files</button></li>
+            <li><button type="button" data-tab="outline">Outline</button></li>
+          </ul>
+        </nav>
+        <nav aria-label="Files" id="tree" data-panel="files"></nav>
+        <nav aria-label="Outline" id="outline" data-panel="outline" hidden></nav>
       </aside>
       <main id="editor"></main>
-      <div class="status"><span id="mode"></span><span id="save-state" aria-live="polite"></span></div>
+      <div class="empty-state">
+        <p>Open a folder <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>, a file <kbd>Ctrl</kbd>+<kbd>O</kbd>,
+          or create one <kbd>Ctrl</kbd>+<kbd>N</kbd>.</p>
+      </div>
+      <div class="status">
+        <span class="cluster">
+          <button type="button" class="tertiary small status-button" id="theme-toggle"></button>
+          <span id="mode"></span>
+        </span>
+        <span class="cluster">
+          <button type="button" class="tertiary small status-button" id="history-button" title="Earlier versions of this file" hidden>History</button>
+          <span id="save-state" aria-live="polite"></span>
+        </span>
+      </div>
     </div>
+
+    <dialog id="history" aria-labelledby="history-title">
+      <header><strong id="history-title">History</strong></header>
+      <div class="history-body">
+        <ul id="history-list" aria-label="Versions"></ul>
+        <pre id="history-preview"></pre>
+      </div>
+      <footer>
+        <form method="dialog" class="cluster" style="--cluster-horizontal-alignment: flex-end">
+          <button class="secondary" value="cancel">Cancel</button>
+          <button id="history-restore" value="restore">Restore this version</button>
+        </form>
+      </footer>
+      <form method="dialog"><button class="close" aria-label="Close"></button></form>
+    </dialog>
   </body>
 </html>

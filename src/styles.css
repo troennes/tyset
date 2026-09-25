@@ -71,6 +71,19 @@
     visibility: hidden;
   }
 
+  .empty-state {
+    grid-area: editor;
+    display: grid;
+    place-items: center;
+    padding: var(--space-m);
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  .shell.has-doc .empty-state {
+    display: none;
+  }
+
   .status {
     grid-area: status;
     display: flex;
@@ -82,6 +95,105 @@
 
     .error {
       color: var(--color-danger-text);
+    }
+  }
+
+  #sidebar {
+    /* minium's full-height aside makes every direct nav grow; only the panels should. */
+    .tabs {
+      flex: none;
+      padding-inline: var(--space-xs);
+      margin-block-end: var(--space-2xs);
+    }
+
+    [data-panel][hidden] {
+      display: none;
+    }
+
+    /* Outline entries indent by heading level. */
+    #outline button {
+      padding-inline-start: calc(var(--space-2xs) + (var(--level) - 1) * 0.9rem);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-empty {
+      padding: var(--space-xs);
+      color: var(--color-text-muted);
+    }
+  }
+
+  .status-button {
+    margin: 0;
+    padding: 0 var(--space-3xs);
+    min-height: 0;
+    font-size: inherit;
+    color: var(--color-text-muted);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--color-text);
+    }
+  }
+
+  .status .cluster {
+    --gap: var(--space-2xs);
+    align-items: center;
+  }
+
+  /* Local history dialog (src/history.ts). */
+  #history {
+    width: min(60rem, 90vw);
+  }
+
+  .history-body {
+    display: grid;
+    grid-template-columns: 14rem 1fr;
+    gap: var(--space-s);
+    height: min(28rem, 60vh);
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      overflow-y: auto;
+    }
+
+    li + li {
+      margin-block-start: var(--space-3xs);
+    }
+
+    button {
+      display: grid;
+      width: 100%;
+      margin: 0;
+      text-align: start;
+      background: transparent;
+      color: inherit;
+      border: var(--border-width) solid transparent;
+      box-shadow: none;
+      padding: var(--space-3xs) var(--space-2xs);
+      font-weight: var(--font-weight);
+
+      &:hover {
+        background-color: var(--color-fill);
+      }
+
+      &[aria-current] {
+        background-color: var(--color-primary-fill);
+        border-color: var(--color-primary-border-weak);
+      }
+    }
+
+    small {
+      color: var(--color-text-muted);
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-size: var(--size-small);
     }
   }
 

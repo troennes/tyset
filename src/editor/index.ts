@@ -25,6 +25,7 @@ import { baseTheme, richTheme, sourceTheme } from "./theme";
 
 export type { EditorHost } from "./host";
 export { insertImage } from "./links";
+export { type Heading, headings, revealPosition } from "./outline";
 export { openFind } from "./search";
 
 /** Marks transactions that mirror disk contents, so they don't trigger a save. */
@@ -53,6 +54,16 @@ export function replaceDocument(view: EditorView, text: string, host: EditorHost
     changes: { from: 0, to: view.state.doc.length, insert: text },
     selection: { anchor: head },
     annotations: externalEdit.of(true),
+  });
+}
+
+/** Replace everything as a normal, undoable edit (e.g. restoring a version from history). */
+export function restoreText(view: EditorView, text: string): void {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: text.replace(/\r\n?|\n/g, view.state.lineBreak) },
+    selection: { anchor: 0 },
+    scrollIntoView: true,
+    userEvent: "input.replace",
   });
 }
 
@@ -117,6 +128,7 @@ function extensions(lineBreak: string, host: EditorHost): Extension[] {
     EditorView.contentAttributes.of({ spellcheck: "false", autocapitalize: "off" }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged && !update.transactions.some((t) => t.annotation(externalEdit))) host.onChange();
+      if (update.docChanged || update.selectionSet) host.onViewUpdate(update);
     }),
   ];
 }

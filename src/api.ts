@@ -36,3 +36,25 @@ export const importImageFile = (doc: string, source: string) =>
 
 /** Save a clipboard image as a PNG in `assets/` beside `doc`; null if the clipboard has no image. */
 export const pasteClipboardImage = (doc: string) => invoke<string | null>("paste_clipboard_image", { doc });
+
+export interface Snapshot {
+  id: string;
+  /** Milliseconds since the Unix epoch. */
+  saved: number;
+  size: number;
+}
+
+/** Earlier versions of `path` from local history, newest first. */
+export const listHistory = (path: string) => invoke<Snapshot[]>("list_history", { path });
+
+export const readHistory = (path: string, id: string) => invoke<string>("read_history", { path, id });
+
+/** Create an empty file; an existing file is left as it is. */
+export const createFile = (path: string) => invoke<void>("create_file", { path });
+
+/** Watch the folder of a document outside the open folder; null stops watching. */
+export const watchDocument = (path: string | null) => invoke<void>("watch_document", { path });
+
+export const newWindow = () => invoke<void>("new_window");
+
+export const pathExists = (path: string) => invoke<boolean>("path_exists", { path });

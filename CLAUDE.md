@@ -88,5 +88,11 @@ that nothing is left holding port 1420.
   Image paste therefore reads the clipboard in Rust (`paste_clipboard_image`, using arboard).
 - `@tauri-apps/plugin-opener`'s `allow-open-url` has no URL scope on its own; `allow-default-urls`
   supplies the http/https/mailto/tel scope.
+- minium's `aside.full-height` gives every direct `nav` child `flex: 1`, so the sidebar's tab
+  strip has `flex: none` in `src/styles.css`.
+- Settings are saved as merged key changes (`update_settings`), so windows don't overwrite
+  each other; the frontend owns the shape (`src/settings.ts`).
+- Vite reloads every window when `index.html` changes, and each one then restores the last
+  file from settings. That's expected when testing, not a bug.
 - Live preview only changes decorations (`src/editor/preview.ts`, `accordion.ts`). It must never
   modify the document. Accordion collapse uses CodeMirror folding, which is view state only.

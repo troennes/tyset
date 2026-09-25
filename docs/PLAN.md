@@ -100,7 +100,8 @@ Any **markdown** here, including lists, code and nested accordions.
 - PDF: same HTML rendered with print CSS → OS print dialog → "Save as PDF".
 
 ### Views
-- One theme with light and dark modes. Follows the OS by default; can be overridden.
+- One theme with light and dark modes. Follows the OS until the status-bar button is used,
+  which sets minium's `data-theme` on `<html>` (and the native title bar) and is remembered.
 - Toggle sidebar. No zoom, focus, typewriter, read-only or fullscreen modes.
 
 ## Keyboard shortcuts
@@ -140,7 +141,11 @@ count, rich-text paste, tabs, auto-updater.
 
 ## Status
 
-- Milestones 1–3 are done.
+- Milestones 1–4 are done.
+- Settings: `settings.json` in the app config dir (Linux: `~/.config/no.troennes.tyset/`).
+  Local history: `history/` in the app data dir (Linux: `~/.local/share/no.troennes.tyset/`),
+  at most one snapshot per file every 5 minutes, 50 kept per file.
+- Still to do from the Files section: rename and delete from the tree.
 - Not yet supported: in-page `#heading` links, and toggling `<details open>` from a command.
   Footnotes are out of scope.
 - Tables show as raw pipe text until the grid editor (milestone 5).
