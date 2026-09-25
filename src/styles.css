@@ -125,6 +125,53 @@
     }
   }
 
+  /* File tree context menu and inline rename (src/tree.ts). */
+  .tree-menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: var(--space-3xs);
+    min-width: 12rem;
+    background-color: var(--color-surface-overlay);
+    border: var(--border-width) solid var(--color-border-weak);
+    border-radius: var(--border-radius-m);
+    box-shadow: var(--shadow-medium);
+    font-size: var(--size-small);
+
+    button {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-s);
+      width: 100%;
+      margin: 0;
+      padding: var(--space-3xs) var(--space-2xs);
+      background: transparent;
+      color: inherit;
+      border: none;
+      box-shadow: none;
+      font-weight: var(--font-weight);
+
+      &:is(:hover, :focus-visible) {
+        background-color: var(--color-fill-hover);
+      }
+
+      &[data-action="trash"] {
+        color: var(--color-danger-text);
+      }
+    }
+
+    kbd {
+      font-size: var(--size-tiny);
+    }
+  }
+
+  .tree-rename {
+    width: 100%;
+    margin: 0;
+    padding: 0 var(--space-3xs);
+    font-size: inherit;
+  }
+
   .status-button {
     margin: 0;
     padding: 0 var(--space-3xs);

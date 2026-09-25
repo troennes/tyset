@@ -15,6 +15,8 @@ import {
   newWindow,
   onFsChange,
   pasteClipboardImage,
+  renamePath,
+  trashPath,
   watchDocument,
   watchFolder,
 } from "./api";
@@ -83,7 +85,11 @@ const host: EditorHost = {
   },
 };
 const view: EditorView = createEditor(document.getElementById("editor")!, host);
-const tree = new FileTree(document.getElementById("tree")!, (path) => void openFile(path));
+const tree = new FileTree(document.getElementById("tree")!, {
+  open: (path) => void openFile(path),
+  rename: (path, name) => renameEntry(path, name),
+  trash: (path, isFolder) => trashEntry(path, isFolder),
+});
 const outline = new Outline(document.getElementById("outline")!, view);
 const history = new HistoryDialog((text) => {
   restoreText(view, text); // an ordinary edit: Ctrl+Z undoes it
@@ -137,6 +143,70 @@ async function openFile(path: string): Promise<void> {
   // The folder watcher covers files inside it; watch anything else separately.
   void watchDocument(folder && isInside(path, folder) ? null : path).catch(() => undefined);
   view.focus();
+}
+
+/** Close the open document (e.g. it was moved to the trash). */
+function closeDocument(): void {
+  doc = null;
+  loadDocument(view, "", host);
+  shell.classList.remove("has-doc");
+  historyButton.hidden = true;
+  exportMenu.hidden = true;
+  status.textContent = "";
+  tree.setCurrent(null);
+  outline.refresh();
+  updateSettings({ file: null });
+  void watchDocument(null).catch(() => undefined);
+  void appWindow.setTitle("Tyset");
+}
+
+/** True if `path` is the open document or a folder containing it. */
+function holdsDocument(path: string): boolean {
+  return !!doc && (doc.path === path || isInside(doc.path, path));
+}
+
+async function renameEntry(path: string, name: string): Promise<void> {
+  const current = holdsDocument(path) ? doc : null;
+  const oldDocPath = current?.path ?? "";
+  if (current) {
+    await current.save();
+    // Point the document at its new path first, so the watcher's event for the
+    // old path isn't mistaken for the file being deleted.
+    current.moveTo(resolve(dirName(path), name) + oldDocPath.slice(path.length));
+  }
+  try {
+    const newPath = await renamePath(path, name);
+    tree.renamed(path, newPath);
+    if (current) {
+      current.moveTo(newPath + oldDocPath.slice(path.length));
+      tree.setCurrent(current.path);
+      updateSettings({ file: current.path });
+    }
+    if (folder === path) await openFolder(newPath); // renamed the open folder itself
+  } catch (e) {
+    current?.moveTo(oldDocPath);
+    showError(`Could not rename: ${e}`);
+  }
+  await refreshTree();
+}
+
+async function trashEntry(path: string, isFolder: boolean): Promise<void> {
+  const name = baseName(path);
+  const ok = await ask(
+    isFolder ? `Move the folder “${name}” and everything in it to the trash?` : `Move “${name}” to the trash?`,
+    { title: "Move to Trash", kind: "warning", okLabel: "Move to Trash", cancelLabel: "Cancel" },
+  );
+  if (!ok) return;
+  if (holdsDocument(path)) {
+    await doc!.save();
+    closeDocument();
+  }
+  try {
+    await trashPath(path);
+  } catch (e) {
+    showError(String(e));
+  }
+  await refreshTree();
 }
 
 onFsChange(async ({ paths }) => {
@@ -341,6 +411,17 @@ async function pickFile(): Promise<void> {
 }
 
 document.getElementById("open-folder")!.addEventListener("click", () => void pickFolder());
+
+// F2 renames the open document (in the tree, F2 renames the focused entry instead).
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "F2" || e.ctrlKey || e.altKey || e.metaKey || !doc) return;
+  if ((e.target as HTMLElement).closest("#tree")) return;
+  e.preventDefault();
+  setSidebar(true);
+  showSidebarTab("files");
+  tree.setCurrent(doc.path);
+  tree.startRename(doc.path);
+});
 
 // App-wide shortcuts. Capture phase so they win over the editor's own keymap
 // and also work while the sidebar has focus.

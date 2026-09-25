@@ -47,7 +47,9 @@ only the features we actually use.
 - Open a folder; left sidebar shows a tree of `.md`/`.markdown`/`.txt` files, plus an
   outline tab built from the document's headings.
 - One document per window. Ctrl+Shift+N opens a new window.
-- New file, rename, delete (to trash) from the tree.
+- New file (Ctrl+N); rename (F2, or right-click) and move to trash (Delete, or right-click)
+  from the tree. Renaming the open file or its folder keeps editing it, and its local
+  history moves with it.
 
 ### Saving
 - **Always auto-save** to the real file ~1 s after typing stops, and on file switch,
@@ -128,6 +130,8 @@ Any **markdown** here, including lists, code and nested accordions.
 | Open file / folder  | Ctrl+O / Ctrl+Shift+O |
 | New file / window   | Ctrl+N / Ctrl+Shift+N |
 | Toggle sidebar      | Ctrl+Shift+L      |
+| Rename file         | F2 (in the tree: the focused entry) |
+| Move to trash       | Delete (in the tree) |
 | Print / PDF         | Ctrl+P            |
 | Export HTML         | Ctrl+Shift+E      |
 | Undo / redo         | Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) |
@@ -155,7 +159,6 @@ count, rich-text paste, tabs, auto-updater.
 - Settings: `settings.json` in the app config dir (Linux: `~/.config/no.troennes.tyset/`).
   Local history: `history/` in the app data dir (Linux: `~/.local/share/no.troennes.tyset/`),
   at most one snapshot per file every 5 minutes, 50 kept per file.
-- Still to do from the Files section: rename and delete from the tree.
 - Not yet supported: in-page `#heading` links, and toggling `<details open>` from a command.
   Footnotes are out of scope.
 - Tables: the grid covers top-level tables. Tables inside quotes or lists stay as pipe text.

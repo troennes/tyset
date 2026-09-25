@@ -58,3 +58,9 @@ export const watchDocument = (path: string | null) => invoke<void>("watch_docume
 export const newWindow = () => invoke<void>("new_window");
 
 export const pathExists = (path: string) => invoke<boolean>("path_exists", { path });
+
+/** Rename a file or folder within its folder; resolves to the new path. */
+export const renamePath = (path: string, name: string) => invoke<string>("rename_path", { path, name });
+
+/** Move a file or folder to the system trash. */
+export const trashPath = (path: string) => invoke<void>("trash_path", { path });

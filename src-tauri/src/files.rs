@@ -105,6 +105,35 @@ fn temp_path(target: &Path) -> PathBuf {
     target.with_file_name(format!(".{name}.tyset-tmp"))
 }
 
+/// Rename `path` (a file or folder) to `name` within the same folder.
+/// Refuses names with path separators and never overwrites an existing entry,
+/// except for a case-only change of the same entry (`a.md` -> `A.md`).
+pub fn rename(path: &Path, name: &str) -> io::Result<PathBuf> {
+    let name = name.trim();
+    let invalid = |msg: &str| io::Error::new(io::ErrorKind::InvalidInput, msg.to_string());
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(invalid("enter a name"));
+    }
+    if name.contains(['/', '\\']) {
+        return Err(invalid("names can't contain / or \\"));
+    }
+    let target = path.with_file_name(name);
+    if target == path {
+        return Ok(target);
+    }
+    if target.exists() {
+        let same_entry = match (fs::canonicalize(path), fs::canonicalize(&target)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        };
+        if !same_entry {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("{name} already exists")));
+        }
+    }
+    fs::rename(path, &target)?;
+    Ok(target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +160,26 @@ mod tests {
         atomic_write(&link, b"new").unwrap();
         assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
         assert_eq!(fs::read_to_string(&real).unwrap(), "new");
+    }
+
+    #[test]
+    fn rename_validates_and_never_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.md");
+        let b = dir.path().join("b.md");
+        fs::write(&a, "a").unwrap();
+        fs::write(&b, "b").unwrap();
+
+        assert!(rename(&a, "b.md").is_err()); // exists
+        assert!(rename(&a, "sub/x.md").is_err());
+        assert!(rename(&a, "  ").is_err());
+        assert!(rename(&a, "..").is_err());
+        assert_eq!(fs::read_to_string(&b).unwrap(), "b");
+
+        let c = rename(&a, " c.md ").unwrap();
+        assert_eq!(c, dir.path().join("c.md"));
+        assert_eq!(fs::read_to_string(&c).unwrap(), "a");
+        assert!(!a.exists());
     }
 
     #[test]

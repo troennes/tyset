@@ -72,6 +72,26 @@ fn create_file(path: String) -> CommandResult<()> {
     }
 }
 
+/// Rename a file or folder in place; returns the new path. A file's local history moves with it.
+#[tauri::command]
+fn rename_path(app: AppHandle, path: String, name: String) -> CommandResult<String> {
+    let from = Path::new(&path);
+    let old_key = canonical(from);
+    let target = files::rename(from, &name).map_err(err)?;
+    if target.is_file() {
+        if let Some(root) = history_root(&app) {
+            let _ = history::relocate(&root, &old_key, &canonical(&target));
+        }
+    }
+    Ok(target.to_string_lossy().into_owned())
+}
+
+/// Move a file or folder to the system trash (never deletes permanently).
+#[tauri::command]
+fn trash_path(path: String) -> CommandResult<()> {
+    trash::delete(&path).map_err(|e| format!("Could not move to the trash: {e}"))
+}
+
 #[tauri::command]
 fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
@@ -246,6 +266,8 @@ pub fn run() {
             write_file,
             create_file,
             path_exists,
+            rename_path,
+            trash_path,
             initial_path,
             list_history,
             read_history,

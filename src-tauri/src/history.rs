@@ -82,6 +82,17 @@ fn list_in(dir: &Path) -> io::Result<Vec<Snapshot>> {
     Ok(snapshots)
 }
 
+/// A file was renamed: its snapshots follow it (unless the new name already has history).
+pub fn relocate(history_root: &Path, from: &Path, to: &Path) -> io::Result<()> {
+    let old = folder(history_root, from);
+    let new = folder(history_root, to);
+    if !old.exists() || new.exists() {
+        return Ok(());
+    }
+    fs::rename(&old, &new)?;
+    fs::write(new.join(SOURCE_FILE), to.to_string_lossy().as_bytes())
+}
+
 pub fn read(history_root: &Path, path: &Path, id: &str) -> io::Result<String> {
     // Ids come from the page: accept only our own `<digits>.md` names.
     let valid = id.strip_suffix(".md").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
@@ -120,6 +131,16 @@ mod tests {
             snapshot_at(root.path(), doc, b"x", i * 10 * 60_000).unwrap();
         }
         assert_eq!(list(root.path(), doc).unwrap().len(), MAX_SNAPSHOTS);
+    }
+
+    #[test]
+    fn history_follows_renames() {
+        let root = tempfile::tempdir().unwrap();
+        let (from, to) = (Path::new("/notes/a.md"), Path::new("/notes/b.md"));
+        snapshot_at(root.path(), from, b"v1", 0).unwrap();
+        relocate(root.path(), from, to).unwrap();
+        assert!(list(root.path(), from).unwrap().is_empty());
+        assert_eq!(list(root.path(), to).unwrap().len(), 1);
     }
 
     #[test]

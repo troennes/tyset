@@ -21,7 +21,7 @@ export class Doc {
   error: string | null = null;
 
   constructor(
-    readonly path: string,
+    private currentPath: string,
     contents: string,
     private readonly getText: () => string,
     private readonly onStateChange: (doc: Doc) => void,
@@ -36,6 +36,16 @@ export class Doc {
   ): Promise<{ doc: Doc; contents: string }> {
     const contents = await readFile(path);
     return { doc: new Doc(path, contents, getText, onStateChange), contents };
+  }
+
+  get path(): string {
+    return this.currentPath;
+  }
+
+  /** The file was renamed (by us): keep editing it under its new path. */
+  moveTo(path: string): void {
+    this.currentPath = path;
+    this.onStateChange(this);
   }
 
   get name(): string {
