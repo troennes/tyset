@@ -102,6 +102,45 @@ const richStyles = EditorView.theme({
   ".cm-html-sub": { verticalAlign: "sub", fontSize: "var(--size-small)" },
   ".cm-html-mark": { backgroundColor: "var(--color-warning-fill-hover)" },
 
+  // Table grid (table.ts). The toolbar shows while a cell has focus.
+  // Padding, not margin: CodeMirror measures block widgets without their margins.
+  ".cm-table": { position: "relative", padding: "2rem 0 var(--space-xs)", overflowX: "auto" },
+  ".cm-table table": { borderCollapse: "collapse", margin: "0", minWidth: "50%" },
+  ".cm-table th, .cm-table td": {
+    border: "var(--border-width) solid var(--color-border-strong)",
+    padding: "var(--space-3xs) var(--space-2xs)",
+    minWidth: "4ch",
+    whiteSpace: "pre-wrap",
+    verticalAlign: "top",
+    outline: "none",
+  },
+  ".cm-table th": { backgroundColor: "var(--color-fill)", fontWeight: "var(--font-weight-bold)", textAlign: "start" },
+  ".cm-table th:focus, .cm-table td:focus": { boxShadow: "inset 0 0 0 2px var(--color-primary-focus)" },
+  ".cm-table code": { fontFamily: "var(--font-mono)", fontSize: "var(--font-mono-size)" },
+  ".cm-table-toolbar": {
+    position: "absolute",
+    top: "0",
+    left: "0",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "2px",
+    visibility: "hidden",
+    fontFamily: "var(--font)",
+    fontSize: "var(--size-tiny)",
+  },
+  ".cm-table.cm-table-active .cm-table-toolbar": { visibility: "visible" },
+  // Plain toolbar buttons: undo minium's button styling (theme CSS is unlayered, so it wins).
+  ".cm-table-toolbar button": {
+    all: "unset",
+    cursor: "pointer",
+    padding: "0.15em 0.5em",
+    borderRadius: "var(--border-radius-s)",
+    color: "var(--color-text-muted)",
+    backgroundColor: "var(--color-fill)",
+  },
+  ".cm-table-toolbar button:hover": { color: "var(--color-text)", backgroundColor: "var(--color-fill-active)" },
+  ".cm-table-toolbar [data-action=delete-table]": { marginInlineStart: "auto", color: "var(--color-danger-text)" },
+
   // Accordions: the tag lines collapse to nothing; the summary is a header row.
   ".cm-line.cm-accordion-tag": { fontSize: "0", lineHeight: "0", height: "0", overflow: "hidden" },
   ".cm-line.cm-accordion-summary": {

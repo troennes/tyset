@@ -62,8 +62,9 @@ only the features we actually use.
 - Full GFM: headings, emphasis, strikethrough, lists, task lists (clickable boxes),
   quotes, alerts (`> [!NOTE]` etc.), code fences with syntax highlighting, tables,
   autolinks, images, horizontal rules. (No footnotes.)
-- Tables: grid editor (Tab/Shift+Tab between cells, add/remove rows and columns);
-  written back as aligned pipe tables.
+- Tables: grid editor (Tab/Shift+Tab between cells, add/remove rows and columns, column
+  alignment, Ctrl+T to insert); written back as aligned pipe tables. Only an edited table
+  is reformatted.
 - Images: rendered inline. Dropping/pasting an image file copies it into `./assets/`
   next to the document and inserts a relative link.
 - Paste is always plain text (image files are the only exception).
@@ -114,6 +115,7 @@ Any **markdown** here, including lists, code and nested accordions.
 | Link                | Ctrl+K            |
 | Heading 1–6 / para  | Ctrl+1…6 / Ctrl+0 |
 | Accordion           | Ctrl+Shift+D      |
+| Table               | Ctrl+T            |
 | Find / replace      | Ctrl+F / Ctrl+H   |
 | Source mode         | Ctrl+/            |
 | Save now            | Ctrl+S            |
@@ -141,14 +143,14 @@ count, rich-text paste, tabs, auto-updater.
 
 ## Status
 
-- Milestones 1–4 are done.
+- Milestones 1–5 are done.
 - Settings: `settings.json` in the app config dir (Linux: `~/.config/no.troennes.tyset/`).
   Local history: `history/` in the app data dir (Linux: `~/.local/share/no.troennes.tyset/`),
   at most one snapshot per file every 5 minutes, 50 kept per file.
 - Still to do from the Files section: rename and delete from the tree.
 - Not yet supported: in-page `#heading` links, and toggling `<details open>` from a command.
   Footnotes are out of scope.
-- Tables show as raw pipe text until the grid editor (milestone 5).
+- Tables: the grid covers top-level tables. Tables inside quotes or lists stay as pipe text.
 - Dropping files on the window is implemented but untested: it can't be simulated headlessly.
 
 ## Risks

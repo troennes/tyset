@@ -74,6 +74,12 @@ Kill the app and Vite when done: `pkill -x tyset; pkill -f "^node .*vite"`. Don'
 because the pattern is in that shell's own command line. Check with `pgrep -af "^node .*vite"`
 that nothing is left holding port 1420.
 
+## Tests
+
+`npm test` runs the Vitest unit tests (`src/**/*.test.ts`) for pure logic such as the table
+model and detection. `cargo test --manifest-path src-tauri/Cargo.toml` runs the Rust tests.
+Check UI behaviour headlessly as described above.
+
 ## Gotchas
 
 - CodeMirror injects unlayered CSS, which beats anything in minium's cascade layers. Style the
@@ -94,5 +100,11 @@ that nothing is left holding port 1420.
   each other; the frontend owns the shape (`src/settings.ts`).
 - Vite reloads every window when `index.html` changes, and each one then restores the last
   file from settings. That's expected when testing, not a bug.
+- Block widgets (the table grid) must not have vertical margins: CodeMirror measures them
+  without margins, so its height map drifts and up/down cursor motion jumps too far. Use padding.
+- CodeMirror's vertical cursor motion skips over block widgets. `src/editor/table.ts`
+  catches Up/Down to step into a table's cells.
+- A widget's DOM isn't in the page during `toDOM`, so focusing something inside it must wait
+  for `requestAnimationFrame`.
 - Live preview only changes decorations (`src/editor/preview.ts`, `accordion.ts`). It must never
   modify the document. Accordion collapse uses CodeMirror folding, which is view state only.

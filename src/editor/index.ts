@@ -21,6 +21,7 @@ import type { EditorHost } from "./host";
 import { interactions } from "./links";
 import { livePreview } from "./preview";
 import { findReplace } from "./search";
+import { insertTable, tableGrid, tableState } from "./table";
 import { baseTheme, richTheme, sourceTheme } from "./theme";
 
 export type { EditorHost } from "./host";
@@ -80,7 +81,7 @@ export function setSourceMode(view: EditorView, host: EditorHost, on: boolean): 
 }
 
 function modeExtensions(host: EditorHost): Extension {
-  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), accordionPreview];
+  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), accordionPreview, tableGrid(host)];
 }
 
 function newState(text: string, host: EditorHost): EditorState {
@@ -103,6 +104,7 @@ const formattingKeymap = keymap.of([
   { key: "Mod-Shift-'", run: toggleCodeBlock },
   { key: "Mod-k", run: insertLink },
   { key: "Mod-Shift-d", run: insertAccordion },
+  { key: "Mod-t", run: insertTable },
   ...[0, 1, 2, 3, 4, 5, 6].map((level) => ({ key: `Mod-${level}`, run: setHeading(level) })),
 ]);
 
@@ -118,6 +120,7 @@ function extensions(lineBreak: string, host: EditorHost): Extension[] {
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     codeBlocks,
     accordionState,
+    tableState,
     baseTheme,
     mode.of(modeExtensions(host)),
     findReplace,
