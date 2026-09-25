@@ -1,0 +1,83 @@
+@import "@troennes/minium";
+
+@layer project {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-surface-raised);
+  }
+
+  /* App shell: sidebar | editor, with a status bar along the bottom. */
+  .shell {
+    display: grid;
+    grid-template-columns: 16rem 1fr;
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      "sidebar editor"
+      "sidebar status";
+    height: 100vh;
+
+    &.no-sidebar {
+      grid-template-columns: 0 1fr;
+
+      #sidebar {
+        display: none;
+      }
+    }
+  }
+
+  #sidebar {
+    grid-area: sidebar;
+    height: 100vh;
+    background-color: var(--color-surface);
+    border-inline-end: var(--border-width) solid var(--color-border-weak);
+    font-size: var(--size-small);
+
+    header {
+      padding: var(--space-2xs) var(--space-xs);
+
+      strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    nav {
+      padding-inline: var(--space-2xs);
+    }
+
+    nav button {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* CodeMirror's own styles live in editor.ts: its injected CSS is unlayered and would win here. */
+  #editor {
+    grid-area: editor;
+    min-height: 0;
+    display: flex;
+  }
+
+  .shell:not(.has-doc) #editor {
+    visibility: hidden;
+  }
+
+  .status {
+    grid-area: status;
+    padding: var(--space-3xs) var(--space-xs);
+    font-size: var(--size-tiny);
+    color: var(--color-text-muted);
+    text-align: end;
+
+    &.error {
+      color: var(--color-danger-text, var(--color-text));
+    }
+  }
+}

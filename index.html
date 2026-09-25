@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tyset</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="full-height" id="sidebar">
+        <header class="repel">
+          <strong id="folder-name">No folder</strong>
+          <button class="tertiary small" id="open-folder" title="Open folder (Ctrl+Shift+O)">Open…</button>
+        </header>
+        <nav aria-label="Files" id="tree"></nav>
+      </aside>
+      <main id="editor"></main>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
