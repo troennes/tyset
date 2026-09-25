@@ -108,7 +108,8 @@ Any **markdown** here, including lists, code and nested accordions.
 | Action              | Shortcut          |
 |---------------------|-------------------|
 | Bold / italic       | Ctrl+B / Ctrl+I   |
-| Inline code         | Ctrl+Shift+`      |
+| Inline code         | Ctrl+' (also Ctrl+`) |
+| Code block          | Ctrl+Shift+' (Ctrl+* on Norwegian keyboards) |
 | Link                | Ctrl+K            |
 | Heading 1–6 / para  | Ctrl+1…6 / Ctrl+0 |
 | Accordion           | Ctrl+Shift+D      |

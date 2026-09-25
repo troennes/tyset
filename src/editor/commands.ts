@@ -132,6 +132,41 @@ export const insertLink: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+const FENCE_LINE = /^\s*(`{3,}|~{3,})\s*$/;
+
+/**
+ * Turn the selected lines (or the cursor's line) into a code block, with the cursor
+ * after the opening backticks to type a language. Inside a code block, remove its fences.
+ */
+export const toggleCodeBlock: StateCommand = ({ state, dispatch }) => {
+  const br = state.lineBreak;
+  const range = state.selection.main;
+  const fence = enclosing(state, range.from, range.to, "FencedCode");
+  if (fence) {
+    const open = state.doc.lineAt(fence.from);
+    const close = state.doc.lineAt(fence.to);
+    // An unclosed fence runs to the end of the document: only remove a real closing line.
+    const closed = close.number > open.number && FENCE_LINE.test(close.text);
+    let changes: ChangeSpec[];
+    if (closed && close.number === open.number + 1) {
+      changes = [{ from: open.from, to: close.to }]; // empty block
+    } else {
+      changes = [{ from: open.from, to: Math.min(open.to + br.length, state.doc.length) }];
+      if (closed) changes.push({ from: close.from - br.length, to: close.to });
+    }
+    dispatch(state.update({ changes, ...formatting }));
+    return true;
+  }
+
+  const from = state.doc.lineAt(range.from).from;
+  const to = state.doc.lineAt(range.to).to;
+  const insert = "```" + br + state.sliceDoc(from, to) + br + "```";
+  dispatch(
+    state.update({ changes: { from, to, insert }, selection: EditorSelection.cursor(from + 3), ...formatting }),
+  );
+  return true;
+};
+
 const ACCORDION_TITLE = "Title";
 
 /**

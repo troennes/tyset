@@ -13,6 +13,7 @@ import {
   insertLink,
   setHeading,
   strong,
+  toggleCodeBlock,
   toggleInline,
 } from "./commands";
 import { findReplace } from "./search";
@@ -69,8 +70,12 @@ function lineBreakOf(text: string): string {
 const formattingKeymap = keymap.of([
   { key: "Mod-b", run: toggleInline(strong) },
   { key: "Mod-i", run: toggleInline(emphasis) },
+  // Code: Ctrl+' / Ctrl+Shift+'. On Norwegian keyboards ' is the key left of Enter (Shift+' is *),
+  // since backtick is a dead key there. Ctrl+` also works on US layouts.
+  { key: "Mod-'", run: toggleInline(inlineCode) },
   { key: "Mod-`", run: toggleInline(inlineCode) },
-  { key: "Mod-Shift-`", run: toggleInline(inlineCode) },
+  { key: "Mod-*", run: toggleCodeBlock },
+  { key: "Mod-Shift-'", run: toggleCodeBlock },
   { key: "Mod-k", run: insertLink },
   { key: "Mod-Shift-d", run: insertAccordion },
   ...[0, 1, 2, 3, 4, 5, 6].map((level) => ({ key: `Mod-${level}`, run: setHeading(level) })),
