@@ -6,7 +6,7 @@ import type { EditorView } from "@codemirror/view";
 
 import { initialPath, listTree, onFsChange, watchFolder } from "./api";
 import { Doc } from "./document";
-import { createEditor, loadDocument, replaceDocument } from "./editor";
+import { createEditor, isSourceMode, loadDocument, openFind, replaceDocument, setSourceMode } from "./editor";
 import { FileTree } from "./tree";
 
 const MARKDOWN_EXTENSIONS = ["md", "markdown", "txt"];
@@ -15,7 +15,8 @@ const TREE_REFRESH_DELAY_MS = 200;
 const appWindow = getCurrentWindow();
 const shell = document.querySelector<HTMLElement>(".shell")!;
 const folderName = document.getElementById("folder-name")!;
-const status = document.getElementById("status")!;
+const status = document.getElementById("save-state")!;
+const modeLabel = document.getElementById("mode")!;
 
 let folder: string | null = null;
 let doc: Doc | null = null;
@@ -55,7 +56,8 @@ async function openFile(path: string): Promise<void> {
   if (doc?.path === path) return;
   await doc?.save();
   try {
-    const opened = await Doc.open(path, () => view.state.doc.toString(), renderState);
+    // sliceDoc, unlike doc.toString(), keeps the file's own line endings.
+    const opened = await Doc.open(path, () => view.state.sliceDoc(), renderState);
     doc = opened.doc;
     loadDocument(view, opened.contents, onEdit);
   } catch (e) {
@@ -75,7 +77,7 @@ onFsChange(async ({ paths }) => {
   if (doc && paths.includes(doc.path)) {
     const current = doc;
     const text = await current.externalChange();
-    if (text !== null && doc === current) replaceDocument(view, text);
+    if (text !== null && doc === current) replaceDocument(view, text, onEdit);
   }
 });
 
@@ -111,7 +113,18 @@ async function pickFile(): Promise<void> {
 
 document.getElementById("open-folder")!.addEventListener("click", () => void pickFolder());
 
-// Capture phase so these win over the editor's own keymap.
+function toggleSourceMode(): void {
+  setSourceMode(view, !isSourceMode());
+  renderMode();
+  remember("sourceMode", String(isSourceMode()));
+}
+
+function renderMode(): void {
+  modeLabel.textContent = isSourceMode() ? "Source" : "";
+}
+
+// App-wide shortcuts. Capture phase so they win over the editor's own keymap
+// and also work while the sidebar has focus.
 window.addEventListener(
   "keydown",
   (e) => {
@@ -122,6 +135,10 @@ window.addEventListener(
       : key === "o" && !e.shiftKey ? pickFile
       : key === "o" && e.shiftKey ? pickFolder
       : key === "l" && e.shiftKey ? () => shell.classList.toggle("no-sidebar")
+      : key === "f" && !e.shiftKey && doc ? () => openFind(view, false)
+      : key === "h" && !e.shiftKey && doc ? () => openFind(view, true)
+      // "/" is Shift+7 on Nordic layouts, so Shift is allowed here.
+      : key === "/" ? toggleSourceMode
       : null;
     if (!command) return;
     e.preventDefault();
@@ -148,6 +165,8 @@ void appWindow.onCloseRequested(async (event) => {
 // --- Startup ------------------------------------------------------------------
 
 async function start(): Promise<void> {
+  if (recall("sourceMode") === "true") setSourceMode(view, true);
+  renderMode();
   const cliPath = await initialPath();
   if (cliPath) {
     await openFolder(parentDir(cliPath));

@@ -1,4 +1,6 @@
 @import "@troennes/minium";
+/* Code colours (--syntax-*), shared with HTML export. */
+@import "@troennes/minium/integrations/prism.css";
 
 @layer project {
   html,
@@ -71,13 +73,71 @@
 
   .status {
     grid-area: status;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-s);
     padding: var(--space-3xs) var(--space-xs);
     font-size: var(--size-tiny);
     color: var(--color-text-muted);
-    text-align: end;
 
-    &.error {
-      color: var(--color-danger-text, var(--color-text));
+    .error {
+      color: var(--color-danger-text);
     }
+  }
+
+  /* Find/replace panel (src/editor/search.ts). */
+  .find-panel {
+    padding: var(--space-2xs) var(--space-xs);
+    display: grid;
+    gap: var(--space-3xs);
+    font-size: var(--size-small);
+  }
+
+  .find-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3xs);
+    max-width: var(--content-width);
+    margin-inline: auto;
+
+    &[hidden] {
+      display: none;
+    }
+
+    input {
+      flex: 1;
+      min-width: 8rem;
+      margin: 0;
+      padding-block: var(--space-3xs);
+      font-size: inherit;
+    }
+
+    button {
+      margin: 0;
+      min-width: 2em;
+      font-size: inherit;
+    }
+
+    .icon-button {
+      color: var(--color-text-muted);
+      text-decoration: none;
+
+      &:hover {
+        color: var(--color-text);
+        background-color: var(--color-fill-hover);
+      }
+    }
+
+    button[aria-pressed="true"] {
+      background-color: var(--color-primary-fill-active);
+      color: var(--color-primary-text);
+    }
+  }
+
+  .find-count {
+    min-width: 6rem;
+    text-align: center;
+    color: var(--color-text-muted);
+    white-space: nowrap;
   }
 }

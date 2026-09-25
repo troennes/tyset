@@ -48,17 +48,29 @@ xdotool mousemove 500 180 click 1              # click (screen coordinates)
 xdotool key ctrl+End                           # shortcuts
 xdotool type --delay 30 -- "- text"            # `--` needed when the text starts with "-"
 xdotool getwindowname <id>                     # window title shows "• " while edits are unsaved
+printf 'text' | xsel --clipboard --input       # put text on the clipboard, then: xdotool key ctrl+v
+od -c file.md                                  # check line endings (\r\n) on disk
 ```
+
+The main window can take several seconds to appear. Poll for it with
+`xdotool search --name Tyset` (case-insensitive) rather than sleeping a fixed time.
 
 To check auto-save, type, wait about 2 s, then `cat` the file. To check outside changes, edit the
 file from the shell while the app is open.
 
 ### Clean up
 
-Kill the app and Vite when done: `pkill -f debug/tyset; pkill -f node_modules/.bin/vite`.
-Check with `pgrep -af vite` that nothing is left holding port 1420.
+Kill the app and Vite when done: `pkill -x tyset; pkill -f "^node .*vite"`. Don't use
+`pkill -f debug/tyset` or similar: it also matches (and kills) the shell running the command,
+because the pattern is in that shell's own command line. Check with `pgrep -af "^node .*vite"`
+that nothing is left holding port 1420.
 
 ## Gotchas
 
 - CodeMirror injects unlayered CSS, which beats anything in minium's cascade layers. Style the
-  editor through `EditorView.theme()` in `src/editor.ts`, not `src/styles.css`.
+  editor through `EditorView.theme()` in `src/editor/theme.ts`, not `src/styles.css`. Within
+  themes, `.cm-line { padding: 0 }` wins ties, so line-class rules need `.cm-line.cm-x` specificity.
+- Read editor text with `state.sliceDoc()`, never `state.doc.toString()`. The latter always
+  joins with `\n`, which would convert CRLF files to LF on save.
+- minium styles `aria-invalid="false"` as a success state, so set the attribute only when
+  the value is actually invalid.
