@@ -1,3 +1,4 @@
+mod assets;
 mod files;
 
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -5,7 +6,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, State, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
 
 use files::TreeNode;
 
@@ -34,8 +35,63 @@ fn list_tree(root: String) -> CommandResult<Vec<TreeNode>> {
 }
 
 #[tauri::command]
-fn read_file(path: String) -> CommandResult<String> {
-    std::fs::read_to_string(path).map_err(err)
+fn read_file(app: AppHandle, path: String) -> CommandResult<String> {
+    let contents = std::fs::read_to_string(&path).map_err(err)?;
+    // Let the page show images stored beside the document.
+    if let Some(dir) = Path::new(&path).parent() {
+        allow_assets(&app, dir);
+    }
+    Ok(contents)
+}
+
+/// Link an image file (e.g. dropped on the window) from `doc`, copying it into
+/// `assets/` unless it is already inside the document's folder.
+#[tauri::command]
+fn import_image_file(doc: String, source: String) -> CommandResult<String> {
+    if !assets::is_image(Path::new(&source)) {
+        return Err(format!("Not an image: {source}"));
+    }
+    assets::import_file(Path::new(&doc), Path::new(&source)).map_err(err)
+}
+
+/// Save the image on the clipboard (e.g. a screenshot) as a PNG in `assets/`
+/// beside `doc`. Returns the link, or `None` if the clipboard holds no image.
+/// Read natively because WebKitGTK does not expose clipboard images to the page.
+#[tauri::command]
+fn paste_clipboard_image(doc: String) -> CommandResult<Option<String>> {
+    let mut clipboard = arboard::Clipboard::new().map_err(err)?;
+    let Ok(image) = clipboard.get_image() else { return Ok(None) };
+    let png = assets::encode_png(image.width as u32, image.height as u32, &image.bytes).map_err(err)?;
+    let name = format!("image-{}.png", timestamp());
+    assets::import_bytes(Path::new(&doc), &name, &png).map(Some).map_err(err)
+}
+
+/// UTC `YYYYMMDD-HHMMSS`, for naming pasted images.
+fn timestamp() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format_timestamp(secs)
+}
+
+fn format_timestamp(secs: u64) -> String {
+    let (days, rem) = (secs / 86_400, secs % 86_400);
+    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}{month:02}{day:02}-{:02}{:02}{:02}", rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
+fn allow_assets(app: &AppHandle, dir: &Path) {
+    let _ = app.asset_protocol_scope().allow_directory(dir, true);
 }
 
 #[tauri::command]
@@ -54,6 +110,7 @@ fn initial_path(state: State<AppState>) -> Option<String> {
 fn watch_folder(window: WebviewWindow, state: State<AppState>, root: String) -> CommandResult<()> {
     let label = window.label().to_string();
     let root_path = PathBuf::from(&root);
+    allow_assets(window.app_handle(), &root_path);
     let target = window.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         let Ok(event) = res else { return };
@@ -93,6 +150,7 @@ fn cli_path() -> Option<String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState { initial_path: Mutex::new(cli_path()), ..Default::default() })
         .on_window_event(|window, event| {
             if let WindowEvent::Destroyed = event {
@@ -105,7 +163,9 @@ pub fn run() {
             read_file,
             write_file,
             watch_folder,
-            initial_path
+            initial_path,
+            import_image_file,
+            paste_clipboard_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tyset");
@@ -114,6 +174,14 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn timestamps() {
+        assert_eq!(format_timestamp(0), "19700101-000000");
+        assert_eq!(format_timestamp(951_782_400), "20000229-000000"); // leap day
+        assert_eq!(format_timestamp(1_790_330_696), "20260925-100456");
+        assert_eq!(timestamp().len(), 15);
+    }
 
     #[test]
     fn hidden_paths_are_relative_to_root() {

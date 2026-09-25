@@ -19,7 +19,7 @@ only the features we actually use.
 | Shell    | Tauri 2 (Rust backend, system web view)                  |
 | Editor   | CodeMirror 6 + `@lezer/markdown` (GFM) + custom live-preview layer |
 | UI       | Vanilla TypeScript, Vite, [minium](https://minium.style) (`@troennes/minium`) |
-| Export   | `comrak` (Rust, GFM + alerts + footnotes) → HTML; PDF via print dialog |
+| Export   | `comrak` (Rust, GFM + alerts) → HTML; PDF via print dialog |
 | Packages | Windows NSIS installer, Linux `.deb`                     |
 
 ## Architecture
@@ -61,7 +61,7 @@ only the features we actually use.
 - Live preview: markdown syntax is hidden except on the line/element under the cursor.
 - Full GFM: headings, emphasis, strikethrough, lists, task lists (clickable boxes),
   quotes, alerts (`> [!NOTE]` etc.), code fences with syntax highlighting, tables,
-  footnotes, autolinks, images, horizontal rules.
+  autolinks, images, horizontal rules. (No footnotes.)
 - Tables: grid editor (Tab/Shift+Tab between cells, add/remove rows and columns);
   written back as aligned pipe tables.
 - Images: rendered inline. Dropping/pasting an image file copies it into `./assets/`
@@ -137,6 +137,14 @@ count, rich-text paste, tabs, auto-updater.
 5. **Table grid editor.**
 6. **Export** — HTML, PDF via print dialog.
 7. **Packaging** — `.deb` + NSIS installer, GitHub Actions CI for both.
+
+## Status
+
+- Milestones 1–3 are done.
+- Not yet supported: in-page `#heading` links, and toggling `<details open>` from a command.
+  Footnotes are out of scope.
+- Tables show as raw pipe text until the grid editor (milestone 5).
+- Dropping files on the window is implemented but untested: it can't be simulated headlessly.
 
 ## Risks
 - Live preview cursor/selection behaviour is the most delicate part; tables next.

@@ -29,3 +29,10 @@ export const initialPath = () => invoke<string | null>("initial_path");
 /** Changes under this window's watched folder (events are targeted per window). */
 export const onFsChange = (handler: (change: FsChange) => void): Promise<UnlistenFn> =>
   getCurrentWebviewWindow().listen<FsChange>("fs-change", (event) => handler(event.payload));
+
+/** Link an image file from `doc`, copying it into `assets/` if it is outside the doc's folder. */
+export const importImageFile = (doc: string, source: string) =>
+  invoke<string>("import_image_file", { doc, source });
+
+/** Save a clipboard image as a PNG in `assets/` beside `doc`; null if the clipboard has no image. */
+export const pasteClipboardImage = (doc: string) => invoke<string | null>("paste_clipboard_image", { doc });

@@ -52,6 +52,15 @@ printf 'text' | xsel --clipboard --input       # put text on the clipboard, then
 od -c file.md                                  # check line endings (\r\n) on disk
 ```
 
+- **Keyboard layout:** the user types on a Norwegian keyboard. Test shortcuts with
+  `setxkbmap -display :99 no` so xdotool presses the real physical keys (Ctrl+' is the key left of
+  Enter, Ctrl+Shift+7 is Ctrl+/).
+- **Clipboard image:** hold one with a small GTK script (`Gtk.Clipboard.set_image(Pixbuf)`, then
+  `Gtk.main()` for about 60 s). The clipboard empties as soon as the owning process exits.
+- **Opening links:** put a fake `xdg-open` that logs its arguments first on the app's `PATH`. It must
+  live in the git-ignored `src-tauri/target/`, because the scratchpad is mounted `noexec`.
+- **Rust or capability changes** need `cargo build` and an app restart; Vite only hot-reloads the frontend.
+
 The main window can take several seconds to appear. Poll for it with
 `xdotool search --name Tyset` (case-insensitive) rather than sleeping a fixed time.
 
@@ -73,4 +82,11 @@ that nothing is left holding port 1420.
 - Read editor text with `state.sliceDoc()`, never `state.doc.toString()`. The latter always
   joins with `\n`, which would convert CRLF files to LF on save.
 - minium styles `aria-invalid="false"` as a success state, so set the attribute only when
-  the value is actually invalid.
+  the value is actually invalid. It also styles anything with `role="button"` as a button, so
+  editor widgets with that role need `all: unset` in the editor theme.
+- WebKitGTK doesn't expose clipboard images to the page: `clipboardData` has no types, files or items.
+  Image paste therefore reads the clipboard in Rust (`paste_clipboard_image`, using arboard).
+- `@tauri-apps/plugin-opener`'s `allow-open-url` has no URL scope on its own; `allow-default-urls`
+  supplies the http/https/mailto/tel scope.
+- Live preview only changes decorations (`src/editor/preview.ts`, `accordion.ts`). It must never
+  modify the document. Accordion collapse uses CodeMirror folding, which is view state only.

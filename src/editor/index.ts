@@ -1,10 +1,11 @@
-// The CodeMirror editor: markdown source with formatting, find/replace and source mode.
+// The CodeMirror editor: markdown with live preview, formatting, find/replace and source mode.
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { Annotation, Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 
+import { accordionPreview, accordionState, initialFolds, unfoldAll } from "./accordion";
 import { codeBlocks } from "./codeblocks";
 import {
   emphasis,
@@ -16,9 +17,14 @@ import {
   toggleCodeBlock,
   toggleInline,
 } from "./commands";
+import type { EditorHost } from "./host";
+import { interactions } from "./links";
+import { livePreview } from "./preview";
 import { findReplace } from "./search";
-import { baseTheme, richMode, sourceMode } from "./theme";
+import { baseTheme, richTheme, sourceTheme } from "./theme";
 
+export type { EditorHost } from "./host";
+export { insertImage } from "./links";
 export { openFind } from "./search";
 
 /** Marks transactions that mirror disk contents, so they don't trigger a save. */
@@ -26,19 +32,20 @@ const externalEdit = Annotation.define<boolean>();
 const mode = new Compartment();
 let inSourceMode = false;
 
-export function createEditor(parent: HTMLElement, onChange: () => void): EditorView {
-  return new EditorView({ parent, state: newState("", onChange) });
+export function createEditor(parent: HTMLElement, host: EditorHost): EditorView {
+  return new EditorView({ parent, state: newState("", host) });
 }
 
-/** Replace the whole document with a fresh state (new file: no undo history carried over). */
-export function loadDocument(view: EditorView, text: string, onChange: () => void): void {
-  view.setState(newState(text, onChange));
+/** Show a newly opened file: fresh state (no undo history carried over), accordions collapsed. */
+export function loadDocument(view: EditorView, text: string, host: EditorHost): void {
+  view.setState(newState(text, host));
+  if (!inSourceMode) view.dispatch({ effects: initialFolds(view.state) });
 }
 
 /** Swap in text that changed on disk, keeping undo history and the cursor where possible. */
-export function replaceDocument(view: EditorView, text: string, onChange: () => void): void {
+export function replaceDocument(view: EditorView, text: string, host: EditorHost): void {
   if (lineBreakOf(text) !== view.state.lineBreak) {
-    loadDocument(view, text, onChange); // line endings changed: needs a new state
+    loadDocument(view, text, host); // line endings changed: needs a new state
     return;
   }
   const head = Math.min(view.state.selection.main.head, text.length);
@@ -53,13 +60,20 @@ export function isSourceMode(): boolean {
   return inSourceMode;
 }
 
-export function setSourceMode(view: EditorView, on: boolean): void {
+export function setSourceMode(view: EditorView, host: EditorHost, on: boolean): void {
   inSourceMode = on;
-  view.dispatch({ effects: mode.reconfigure(on ? sourceMode : richMode) });
+  view.dispatch({
+    // Source mode shows everything, including collapsed accordions.
+    effects: [mode.reconfigure(modeExtensions(host)), ...(on ? unfoldAll(view.state) : [])],
+  });
 }
 
-function newState(text: string, onChange: () => void): EditorState {
-  return EditorState.create({ doc: text, extensions: extensions(lineBreakOf(text), onChange) });
+function modeExtensions(host: EditorHost): Extension {
+  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), accordionPreview];
+}
+
+function newState(text: string, host: EditorHost): EditorState {
+  return EditorState.create({ doc: text, extensions: extensions(lineBreakOf(text), host) });
 }
 
 /** Keep the file's own line endings, so saving a Windows file doesn't rewrite every line. */
@@ -81,7 +95,7 @@ const formattingKeymap = keymap.of([
   ...[0, 1, 2, 3, 4, 5, 6].map((level) => ({ key: `Mod-${level}`, run: setHeading(level) })),
 ]);
 
-function extensions(lineBreak: string, onChange: () => void): Extension[] {
+function extensions(lineBreak: string, host: EditorHost): Extension[] {
   return [
     EditorState.lineSeparator.of(lineBreak),
     // Paste is always plain text; convert its line endings to the document's.
@@ -92,15 +106,17 @@ function extensions(lineBreak: string, onChange: () => void): Extension[] {
     // GFM (tables, task lists, strikethrough, autolinks); code fences highlighted by language.
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     codeBlocks,
+    accordionState,
     baseTheme,
-    mode.of(inSourceMode ? sourceMode : richMode),
+    mode.of(modeExtensions(host)),
     findReplace,
+    interactions(host),
     // Above the default keymap, which binds Mod-i to "select parent syntax".
     Prec.high(formattingKeymap),
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     EditorView.contentAttributes.of({ spellcheck: "false", autocapitalize: "off" }),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged && !update.transactions.some((t) => t.annotation(externalEdit))) onChange();
+      if (update.docChanged && !update.transactions.some((t) => t.annotation(externalEdit))) host.onChange();
     }),
   ];
 }

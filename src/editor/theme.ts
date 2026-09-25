@@ -33,14 +33,108 @@ const base = EditorView.theme({
   ".cm-codeblock": { fontFamily: "var(--font-mono)", backgroundColor: "var(--color-surface-sunken)" },
 });
 
-/** Formatted view: proportional type, sized headings. Live preview builds on this (milestone 3). */
-const richTheme = EditorView.theme({
+const alertColours = {
+  note: "info",
+  tip: "success",
+  important: "accent",
+  warning: "warning",
+  caution: "danger",
+} as const;
+
+/** Formatted view with live preview: proportional type, sized headings, widgets. */
+const richStyles = EditorView.theme({
   ".cm-scroller": { fontFamily: "var(--font)", fontSize: "var(--size-body)" },
   ".cm-line.cm-codeblock": { fontSize: "var(--font-mono-size)", paddingInline: "var(--space-xs)" },
+  ".cm-code-language": {
+    float: "right",
+    fontFamily: "var(--font)",
+    fontSize: "var(--size-tiny)",
+    color: "var(--color-text-muted)",
+  },
+
+  ".cm-link-text": { textDecoration: "underline", textUnderlineOffset: "var(--text-underline-offset)" },
+  ".cm-bullet": { display: "inline-block", width: "1ch", color: "var(--color-text-muted)" },
+  ".cm-task": { margin: "0 0.4em 0 0", verticalAlign: "-0.1em", cursor: "pointer" },
+
+  ".cm-line.cm-quote": {
+    borderInlineStart: "3px solid var(--color-border-strong)",
+    paddingInlineStart: "var(--space-s)",
+    color: "var(--color-text-muted)",
+  },
+  ".cm-line.cm-alert": { paddingInlineStart: "var(--space-s)", borderInlineStart: "3px solid" },
+  ...Object.fromEntries(
+    Object.entries(alertColours).flatMap(([kind, tone]) => [
+      [`.cm-line.cm-alert-${kind}`, { borderColor: `var(--color-${tone})`, backgroundColor: `var(--color-${tone}-fill)` }],
+      [`.cm-alert-label-${kind}`, { color: `var(--color-${tone}-text)` }],
+    ]),
+  ),
+  ".cm-alert-label": { fontWeight: "var(--font-weight-bold)" },
+
+  ".cm-line.cm-hr": {
+    backgroundImage: "linear-gradient(var(--color-border-strong), var(--color-border-strong))",
+    backgroundSize: "100% 1px",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+  },
+
+  ".cm-image": {
+    display: "block",
+    maxWidth: "100%",
+    maxHeight: "60vh",
+    margin: "var(--space-2xs) 0",
+    borderRadius: "var(--border-radius-s)",
+  },
+  ".cm-image-broken": {
+    minWidth: "8rem",
+    minHeight: "2rem",
+    outline: "1px dashed var(--color-border-strong)",
+  },
+
+  ".cm-html-kbd": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--size-small)",
+    padding: "0 0.3em",
+    border: "var(--border-width) solid var(--color-border-strong)",
+    borderBottomWidth: "2px",
+    borderRadius: "var(--border-radius-s)",
+  },
+  ".cm-html-sup": { verticalAlign: "super", fontSize: "var(--size-small)" },
+  ".cm-html-sub": { verticalAlign: "sub", fontSize: "var(--size-small)" },
+  ".cm-html-mark": { backgroundColor: "var(--color-warning-fill-hover)" },
+
+  // Accordions: the tag lines collapse to nothing; the summary is a header row.
+  ".cm-line.cm-accordion-tag": { fontSize: "0", lineHeight: "0", height: "0", overflow: "hidden" },
+  ".cm-line.cm-accordion-summary": {
+    fontWeight: "var(--font-weight-bold)",
+    backgroundColor: "var(--color-fill)",
+    borderRadius: "var(--border-radius-s)",
+    paddingInline: "var(--space-3xs)",
+  },
+  // role="button" picks up minium's button styles; reset them (theme CSS is unlayered, so it wins).
+  ".cm-accordion-toggle": {
+    all: "unset",
+    display: "inline-block",
+    width: "1.25em",
+    textAlign: "center",
+    cursor: "pointer",
+    color: "var(--color-text-muted)",
+    transition: "transform 0.15s",
+    userSelect: "none",
+  },
+  ".cm-accordion-toggle[aria-expanded=true]": { transform: "rotate(90deg)" },
+  ".cm-accordion-folded": { marginInlineStart: "0.5em", color: "var(--color-text-muted)", cursor: "pointer" },
+  // One indent guide per nesting level.
+  ".cm-line.cm-accordion-body": {
+    paddingInlineStart: "calc(var(--accordion-depth) * 1rem)",
+    backgroundImage:
+      "repeating-linear-gradient(to right, var(--color-border-weak) 0 2px, transparent 2px 1rem)",
+    backgroundSize: "calc(var(--accordion-depth) * 1rem) 100%",
+    backgroundRepeat: "no-repeat",
+  },
 });
 
 /** Source mode: everything monospace, headings not resized. */
-const sourceTheme = EditorView.theme({
+const sourceStyles = EditorView.theme({
   ".cm-scroller": { fontFamily: "var(--font-mono)", fontSize: "var(--size-body)" },
   ".cm-line.cm-codeblock": { backgroundColor: "transparent" },
 });
@@ -87,5 +181,5 @@ const sourceHighlight = HighlightStyle.define([
 ]);
 
 export const baseTheme: Extension = base;
-export const richMode: Extension = [richTheme, syntaxHighlighting(richHighlight)];
-export const sourceMode: Extension = [sourceTheme, syntaxHighlighting(sourceHighlight)];
+export const richTheme: Extension = [richStyles, syntaxHighlighting(richHighlight)];
+export const sourceTheme: Extension = [sourceStyles, syntaxHighlighting(sourceHighlight)];
