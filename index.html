@@ -33,6 +33,15 @@
           <span id="mode"></span>
         </span>
         <span class="cluster">
+          <div class="dropdown" id="export" hidden>
+            <button type="button" class="tertiary small status-button" popovertarget="export-menu">Export</button>
+            <div id="export-menu" popover>
+              <ul>
+                <li><button type="button" data-export="html">HTML file… <kbd>Ctrl+Shift+E</kbd></button></li>
+                <li><button type="button" data-export="pdf">Print or PDF… <kbd>Ctrl+P</kbd></button></li>
+              </ul>
+            </div>
+          </div>
           <button type="button" class="tertiary small status-button" id="history-button" title="Earlier versions of this file" hidden>History</button>
           <span id="save-state" aria-live="polite"></span>
         </span>

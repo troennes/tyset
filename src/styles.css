@@ -1,6 +1,8 @@
 @import "@troennes/minium";
 /* Code colours (--syntax-*), shared with HTML export. */
 @import "@troennes/minium/integrations/prism.css";
+/* Document styles for printing (also inlined into HTML exports). */
+@import "./export.css";
 
 @layer project {
   html,
@@ -139,6 +141,37 @@
   .status .cluster {
     --gap: var(--space-2xs);
     align-items: center;
+  }
+
+  /* Printing (src/export.ts): only the print layer reaches the page. */
+  .print-layer {
+    display: none;
+  }
+
+  @media print {
+    html,
+    body {
+      height: auto;
+      overflow: visible;
+    }
+
+    body.printing > :not(.print-layer) {
+      display: none !important;
+    }
+
+    body.printing .print-layer {
+      display: block;
+    }
+
+    /* Plain white paper (the app's body rule would otherwise win over export.css). */
+    body.printing {
+      background: white;
+    }
+  }
+
+  #export-menu kbd {
+    margin-inline-start: var(--space-s);
+    font-size: var(--size-tiny);
   }
 
   /* Local history dialog (src/history.ts). */

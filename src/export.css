@@ -1,0 +1,98 @@
+/* Exported documents and printing: inlined into HTML exports, and used by the
+   in-app print layer. Builds on minium; colours come from its tokens. */
+@layer project {
+  .tyset-document {
+    padding-block: var(--space-l);
+
+    /* Heading anchors from the renderer: a quiet "#" on hover. */
+    .anchor {
+      margin-inline-start: 0.3em;
+      text-decoration: none;
+      opacity: 0;
+
+      &::before {
+        content: "#";
+      }
+    }
+
+    :is(h1, h2, h3, h4, h5, h6):hover .anchor {
+      opacity: 0.5;
+    }
+
+    .markdown-alert-title {
+      font-weight: var(--font-weight-bold);
+    }
+
+    .task-list-item {
+      list-style: none;
+
+      input {
+        margin-inline: -1.4em 0.4em;
+      }
+    }
+
+    img {
+      max-width: 100%;
+    }
+
+    /* Column alignment arrives as align="…" (as on GitHub); minium's
+       th, td { text-align: start } would otherwise override it. */
+    :is(th, td)[align="left"] { text-align: left; }
+    :is(th, td)[align="center"] { text-align: center; }
+    :is(th, td)[align="right"] { text-align: right; }
+  }
+
+  /* Code colours, matching the editor (minium's Prism palette; classes from @lezer/highlight). */
+  .tok-comment, .tok-meta { color: var(--syntax-comment); }
+  .tok-keyword { color: var(--syntax-keyword); }
+  .tok-string, .tok-string2 { color: var(--syntax-string); }
+  .tok-number, .tok-bool, .tok-atom, .tok-literal { color: var(--syntax-number); }
+  .tok-typeName, .tok-className, .tok-namespace, .tok-propertyName { color: var(--syntax-constant); }
+  .tok-variableName.tok-definition, .tok-macroName { color: var(--syntax-function); }
+  .tok-operator { color: var(--syntax-operator); }
+  .tok-punctuation { color: var(--syntax-punctuation); }
+  .tok-inserted { color: var(--syntax-string); }
+  .tok-deleted { color: var(--syntax-tag); }
+
+  @media print {
+    @page {
+      margin: 18mm 16mm;
+    }
+
+    :root {
+      color-scheme: light; /* never print a dark page */
+    }
+
+    /* Plain white paper; minium's off-white surface would end mid-page. */
+    html,
+    body {
+      background: white;
+    }
+
+    .tyset-document {
+      padding: 0;
+      max-width: none;
+
+      .anchor {
+        display: none;
+      }
+    }
+
+    pre {
+      white-space: pre-wrap;
+    }
+
+    /* No shadows on paper (they also leave slivers behind at page breaks). */
+    * {
+      box-shadow: none !important;
+    }
+
+    pre, blockquote, table, img, .alert, details {
+      break-inside: avoid;
+    }
+
+    :is(h1, h2, h3, h4) {
+      break-after: avoid;
+    }
+  }
+}

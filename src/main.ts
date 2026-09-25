@@ -30,6 +30,7 @@ import {
   restoreText,
   setSourceMode,
 } from "./editor";
+import { printDocument, renderDocument, standaloneHtml, writeExport } from "./export";
 import { HistoryDialog } from "./history";
 import { Outline } from "./outline";
 import { baseName, dirName, isAbsolute, resolve } from "./paths";
@@ -51,6 +52,7 @@ const status = document.getElementById("save-state")!;
 const modeLabel = document.getElementById("mode")!;
 const themeButton = document.getElementById("theme-toggle") as HTMLButtonElement;
 const historyButton = document.getElementById("history-button") as HTMLButtonElement;
+const exportMenu = document.getElementById("export")!;
 
 let folder: string | null = null;
 let doc: Doc | null = null;
@@ -127,6 +129,7 @@ async function openFile(path: string): Promise<void> {
   }
   shell.classList.add("has-doc");
   historyButton.hidden = false;
+  exportMenu.hidden = false;
   tree.setCurrent(path);
   outline.refresh();
   renderState(doc);
@@ -165,6 +168,43 @@ async function newFile(): Promise<void> {
   }
   await openFile(path);
 }
+
+// --- Export -------------------------------------------------------------------
+
+async function exportHtml(): Promise<void> {
+  if (!doc) return;
+  const path = await save({
+    defaultPath: doc.path.replace(/\.(md|markdown|txt)$/i, "") + ".html",
+    filters: [{ name: "HTML", extensions: ["html"] }],
+  });
+  if (!path) return;
+  try {
+    // Relative image links keep working when the file is saved next to the document.
+    const main = await renderDocument(view.state.sliceDoc());
+    await writeExport(path, standaloneHtml(doc.name.replace(/\.[^.]+$/, ""), main));
+    status.classList.remove("error");
+    status.textContent = `Exported ${baseName(path)}`;
+  } catch (e) {
+    showError(`Export failed: ${e}`);
+  }
+}
+
+async function printPdf(): Promise<void> {
+  if (!doc) return;
+  try {
+    const main = await renderDocument(view.state.sliceDoc(), { imageUrl: host.imageUrl });
+    await printDocument(main);
+  } catch (e) {
+    showError(`Could not print: ${e}`);
+  }
+}
+
+document.getElementById("export-menu")!.addEventListener("click", (e) => {
+  const kind = (e.target as HTMLElement).closest<HTMLElement>("[data-export]")?.dataset.export;
+  if (!kind) return;
+  (document.getElementById("export-menu") as HTMLElement).hidePopover();
+  void (kind === "html" ? exportHtml() : printPdf());
+});
 
 // --- Links and images -----------------------------------------------------------
 
@@ -314,6 +354,8 @@ window.addEventListener(
       : key === "o" && !e.shiftKey ? pickFile
       : key === "o" && e.shiftKey ? pickFolder
       : key === "n" && !e.shiftKey ? newFile
+      : key === "p" && !e.shiftKey ? printPdf
+      : key === "e" && e.shiftKey ? exportHtml
       : key === "n" && e.shiftKey ? newWindow
       : key === "l" && e.shiftKey ? () => setSidebar(shell.classList.contains("no-sidebar"))
       : key === "f" && !e.shiftKey && doc ? () => openFind(view, false)

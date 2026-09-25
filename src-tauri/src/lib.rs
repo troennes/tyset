@@ -1,6 +1,7 @@
 //! Tauri commands: the page's only access to files, the clipboard and windows.
 
 mod assets;
+mod export;
 mod files;
 mod history;
 mod watch;
@@ -137,6 +138,25 @@ fn update_settings(app: AppHandle, changes: serde_json::Map<String, serde_json::
     files::atomic_write(&path, text.as_bytes()).map_err(err)
 }
 
+// --- Export -------------------------------------------------------------------
+
+#[tauri::command]
+fn render_markdown(markdown: String) -> String {
+    export::render(&markdown)
+}
+
+/// Write an exported file (no local history: exports are generated, not edited).
+#[tauri::command]
+fn write_export(path: String, contents: String) -> CommandResult<()> {
+    files::atomic_write(Path::new(&path), contents.as_bytes()).map_err(err)
+}
+
+/// Open the system print dialog for the calling window (where "Save as PDF" lives).
+#[tauri::command]
+fn print_page(window: WebviewWindow) -> CommandResult<()> {
+    window.print().map_err(err)
+}
+
 // --- Images -------------------------------------------------------------------
 
 /// Link an image file (e.g. dropped on the window) from `doc`, copying it into
@@ -233,6 +253,9 @@ pub fn run() {
             update_settings,
             import_image_file,
             paste_clipboard_image,
+            render_markdown,
+            write_export,
+            print_page,
             watch_folder,
             watch_document,
             new_window

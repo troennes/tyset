@@ -97,8 +97,14 @@ Any **markdown** here, including lists, code and nested accordions.
   Any other HTML is shown as source text.
 
 ### Export
-- HTML: standalone file with inlined CSS.
-- PDF: same HTML rendered with print CSS → OS print dialog → "Save as PDF".
+- HTML (Ctrl+Shift+E): standalone file with minium's CSS inlined. Fonts load from minium's
+  pinned jsDelivr copy, falling back to system fonts offline. Relative image links work
+  when the file is saved next to the document.
+- PDF (Ctrl+P): the same HTML in a print-only layer, then the OS print dialog → "Save as PDF"
+  (Linux: "Print to File"). Always light, white paper, no shadows.
+- The HTML is rendered by comrak in Rust, then sanitized in the frontend: script-capable
+  elements, `on*` attributes and `javascript:` URLs are removed. Code is highlighted with
+  the editor's own language parsers.
 
 ### Views
 - One theme with light and dark modes. Follows the OS until the status-bar button is used,
@@ -123,6 +129,7 @@ Any **markdown** here, including lists, code and nested accordions.
 | New file / window   | Ctrl+N / Ctrl+Shift+N |
 | Toggle sidebar      | Ctrl+Shift+L      |
 | Print / PDF         | Ctrl+P            |
+| Export HTML         | Ctrl+Shift+E      |
 | Undo / redo         | Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) |
 
 ## Out of scope
@@ -143,7 +150,7 @@ count, rich-text paste, tabs, auto-updater.
 
 ## Status
 
-- Milestones 1–5 are done.
+- Milestones 1–6 are done.
 - Settings: `settings.json` in the app config dir (Linux: `~/.config/no.troennes.tyset/`).
   Local history: `history/` in the app data dir (Linux: `~/.local/share/no.troennes.tyset/`),
   at most one snapshot per file every 5 minutes, 50 kept per file.

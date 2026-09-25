@@ -59,6 +59,11 @@ od -c file.md                                  # check line endings (\r\n) on di
   `Gtk.main()` for about 60 s). The clipboard empties as soon as the owning process exits.
 - **Opening links:** put a fake `xdg-open` that logs its arguments first on the app's `PATH`. It must
   live in the git-ignored `src-tauri/target/`, because the scratchpad is mounted `noexec`.
+- **Viewing an exported HTML file:** open it in a GTK WebKit window from Python
+  (`gi.require_version("WebKit2", "4.1")`), then map it and screenshot as usual.
+- **Printing:** in the print dialog choose "Print to File", which writes `output.pdf` to the
+  app's working directory (the repo root). Move it out immediately. Render pages with
+  `gs -sDEVICE=png16m -r60 -o page-%d.png file.pdf`.
 - **Rust or capability changes** need `cargo build` and an app restart; Vite only hot-reloads the frontend.
 
 The main window can take several seconds to appear. Poll for it with
@@ -106,5 +111,7 @@ Check UI behaviour headlessly as described above.
   catches Up/Down to step into a table's cells.
 - A widget's DOM isn't in the page during `toDOM`, so focusing something inside it must wait
   for `requestAnimationFrame`.
+- minium sets `th, td { text-align: start }`, which overrides GitHub-style `align="…"`
+  attributes; `src/export.css` restores them.
 - Live preview only changes decorations (`src/editor/preview.ts`, `accordion.ts`). It must never
   modify the document. Accordion collapse uses CodeMirror folding, which is view state only.
