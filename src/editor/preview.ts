@@ -37,7 +37,7 @@ const INLINE_MARKS: Record<string, string> = {
 };
 
 /** Inline HTML we render; everything else stays as source text. */
-const INLINE_HTML = /^<(kbd|sup|sub|mark)>$/i;
+const INLINE_HTML = /^<(kbd|sup|sub|mark|u)>$/i;
 
 /**
  * Blocks drawn with a background or side bar (for HTML, the accordion summary): their space

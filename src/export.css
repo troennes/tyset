@@ -59,6 +59,12 @@
       }
     }
 
+    /* Mark with the same padding as inline code, as in the editor. */
+    mark {
+      box-decoration-break: clone;
+      padding: 0.125rem 0.375rem;
+    }
+
     img {
       max-width: 100%;
     }

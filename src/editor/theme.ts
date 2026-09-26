@@ -157,21 +157,50 @@ const richStyles = EditorView.theme({
   },
   ".cm-html-sup": { verticalAlign: "super", fontSize: "var(--size-small)" },
   ".cm-html-sub": { verticalAlign: "sub", fontSize: "var(--size-small)" },
-  ".cm-html-mark": { backgroundColor: "var(--color-warning-fill-hover)" },
+  // minium's mark colour, with inline code's padding.
+  ".cm-html-mark": {
+    backgroundColor: "var(--mark-color)",
+    borderRadius: "var(--border-radius-s)",
+    boxDecorationBreak: "clone",
+    padding: "0.125rem 0.375rem",
+  },
+  ".cm-html-u": {
+    textDecoration: "underline",
+    textDecorationThickness: "var(--text-decoration-thickness)",
+    textUnderlineOffset: "var(--text-underline-offset)",
+  },
 
   // Table grid (table.ts). The toolbar shows while a cell has focus.
   // Padding, not margin: CodeMirror measures block widgets without their margins.
   ".cm-table": { position: "relative", padding: "2rem 0 var(--space-xs)", overflowX: "auto" },
-  ".cm-table table": { borderCollapse: "collapse", margin: "0", minWidth: "50%" },
+  // Separate borders, since collapsed ones can't be rounded. Each cell draws its end and bottom
+  // border; the first column and the header row add the start and top ones.
+  ".cm-table table": { borderCollapse: "separate", borderSpacing: "0", margin: "0", minWidth: "50%" },
   ".cm-table th, .cm-table td": {
-    border: "var(--border-width) solid var(--color-border-strong)",
+    border: "0 solid var(--color-border-strong)",
+    borderInlineEndWidth: "var(--border-width)",
+    borderBottomWidth: "var(--border-width)",
     padding: "var(--space-3xs) var(--space-2xs)",
     minWidth: "4ch",
     whiteSpace: "pre-wrap",
     verticalAlign: "top",
     outline: "none",
   },
-  ".cm-table th": { backgroundColor: "var(--color-fill)", fontWeight: "var(--font-weight-bold)", textAlign: "start" },
+  ".cm-table tr > :first-child": { borderInlineStartWidth: "var(--border-width)" },
+  ".cm-table th:first-child": { borderStartStartRadius: "var(--border-radius-m)" },
+  ".cm-table th:last-child": { borderStartEndRadius: "var(--border-radius-m)" },
+  ".cm-table tbody tr:last-child > :first-child, .cm-table table:not(:has(tbody tr)) th:first-child": {
+    borderEndStartRadius: "var(--border-radius-m)",
+  },
+  ".cm-table tbody tr:last-child > :last-child, .cm-table table:not(:has(tbody tr)) th:last-child": {
+    borderEndEndRadius: "var(--border-radius-m)",
+  },
+  ".cm-table th": {
+    borderTopWidth: "var(--border-width)",
+    backgroundColor: "var(--color-fill)",
+    fontWeight: "var(--font-weight-bold)",
+    textAlign: "start",
+  },
   ".cm-table th:focus, .cm-table td:focus": { boxShadow: "inset 0 0 0 2px var(--color-primary-focus)" },
   ".cm-table code": { fontFamily: "var(--font-mono)", fontSize: "var(--font-mono-size)" },
   ".cm-table-toolbar": {
