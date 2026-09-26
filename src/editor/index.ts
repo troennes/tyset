@@ -7,6 +7,7 @@ import { EditorView, drawSelection, keymap } from "@codemirror/view";
 
 import { accordionPreview, accordionState, initialFolds, unfoldAll } from "./accordion";
 import { alertBoxes } from "./alertbox";
+import { blankLines } from "./blanklines";
 import { codeBlocks } from "./codeblocks";
 import {
   cycleAlert,
@@ -83,7 +84,7 @@ export function setSourceMode(view: EditorView, host: EditorHost, on: boolean): 
 }
 
 function modeExtensions(host: EditorHost): Extension {
-  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), alertBoxes, accordionPreview, tableGrid(host)];
+  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), blankLines, alertBoxes, accordionPreview, tableGrid(host)];
 }
 
 function newState(text: string, host: EditorHost): EditorState {

@@ -58,8 +58,10 @@ const richStyles = EditorView.theme({
     color: "var(--color-text-muted)",
   },
 
-  // Padding, not margin: CodeMirror measures lines without their margins.
-  ".cm-line.cm-heading": { paddingBottom: "1em" },
+  // Space between blocks (preview.ts). Padding, not margin: CodeMirror measures lines
+  // without their margins.
+  ".cm-line.cm-block-end": { paddingBottom: "1em" },
+  ".cm-line.cm-after-block": { paddingTop: "1em" },
 
   ".cm-link-text": {
     color: "var(--color-primary-text)",

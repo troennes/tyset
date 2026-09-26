@@ -22,7 +22,8 @@ const bullet = Decoration.replace({ widget: new BulletWidget() });
 const checked = Decoration.replace({ widget: new CheckboxWidget(true) });
 const unchecked = Decoration.replace({ widget: new CheckboxWidget(false) });
 const hrLine = Decoration.line({ class: "cm-hr" });
-const headingLine = Decoration.line({ class: "cm-heading" });
+const blockEnd = Decoration.line({ class: "cm-block-end" });
+const afterBlock = Decoration.line({ class: "cm-after-block" });
 const inlineCode = Decoration.mark({ class: "cm-inline-code" });
 const alertFirst = Decoration.line({ class: "cm-alert-first" });
 const alertLast = Decoration.line({ class: "cm-alert-last" });
@@ -36,6 +37,14 @@ const INLINE_MARKS: Record<string, string> = {
 
 /** Inline HTML we render; everything else stays as source text. */
 const INLINE_HTML = /^<(kbd|sup|sub|mark)>$/i;
+
+/**
+ * Blocks drawn with a background or side bar (for HTML, the accordion summary): their space
+ * goes above the next block instead.
+ */
+export const BOXED = new Set(["FencedCode", "CodeBlock", "Blockquote", "HorizontalRule", "HTMLBlock"]);
+/** Blocks that keep their own spacing (the table grid) or render nothing. */
+const UNSPACED = new Set(["Table", "CommentBlock", "LinkReference", "ProcessingInstructionBlock"]);
 
 class Builder {
   readonly decorations: Range<Decoration>[] = [];
@@ -106,7 +115,6 @@ class Builder {
     }
     if (/^ATXHeading/.test(name)) return this.heading(node);
     if (/^SetextHeading/.test(name)) {
-      this.headingSpace(node);
       const underline = node.getChild("HeaderMark");
       if (underline && !this.onLines(node.from, node.to)) this.hide(underline.from, underline.to);
       return true;
@@ -151,13 +159,30 @@ class Builder {
     return true;
   }
 
-  /** Space below a heading's last line, whether or not its syntax is showing. */
-  private headingSpace(node: SyntaxNode): void {
-    if (this.visible(node.to)) this.add(headingLine, this.state.doc.lineAt(node.to).from);
+  /**
+   * Space after each top-level block, like the margins in rendered markdown, whether or not
+   * its syntax is showing.
+   */
+  blockSpacing(): void {
+    const { doc } = this.state;
+    const top = syntaxTree(this.state).topNode;
+    for (let block = top.firstChild; block; block = block.nextSibling) {
+      if (block.from > this.to) break;
+      if (UNSPACED.has(block.name)) continue;
+      if (!BOXED.has(block.name)) {
+        const last = doc.lineAt(block.to).from;
+        if (this.visible(last)) this.add(blockEnd, last);
+        continue;
+      }
+      // Two boxed blocks in a row keep a blank line between them (blanklines.ts).
+      const next = block.nextSibling;
+      if (!next || BOXED.has(next.name)) continue;
+      const first = doc.lineAt(next.from).from;
+      if (this.visible(first)) this.add(afterBlock, first);
+    }
   }
 
   private heading(node: SyntaxNode): boolean {
-    this.headingSpace(node);
     if (this.onLines(node.from, node.to)) return true;
     for (const mark of node.getChildren("HeaderMark")) {
       if (mark.from === node.from) {
@@ -276,6 +301,7 @@ function build(view: EditorView, host: EditorHost): DecorationSet {
   const decorations: Range<Decoration>[] = [];
   for (const { from, to } of view.visibleRanges) {
     const builder = new Builder(view.state, host, from, to);
+    builder.blockSpacing();
     syntaxTree(view.state).iterate({ from, to, enter: (ref) => builder.node(ref.node) });
     decorations.push(...builder.decorations);
   }
