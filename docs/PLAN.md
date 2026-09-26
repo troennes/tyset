@@ -46,6 +46,11 @@ only the features we actually use.
 ### Files
 - Open a folder; left sidebar shows a tree of `.md`/`.markdown`/`.txt` files, plus an
   outline tab built from the document's headings.
+- The sidebar's Open menu has Open folder…, Open file… and the last 10 **recent folders** and
+  **recent files**. Only folders the user chose count, and only files opened on their own
+  (Ctrl+O, drop, command line, Save As, a link), not ones clicked in the tree. A recent file
+  also shows its folder in the sidebar. Entries that no longer exist are hidden, but kept, so
+  unmounted drives come back.
 - One document per window. Ctrl+Shift+N opens a new window.
 - Tyset starts with an empty untitled document and no folder (a file given on the command
   line opens instead). Ctrl+N and Ctrl+Shift+N also start untitled documents.

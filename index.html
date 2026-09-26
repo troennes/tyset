@@ -11,7 +11,23 @@
       <aside class="full-height" id="sidebar">
         <header class="repel">
           <strong id="folder-name">No folder</strong>
-          <button class="tertiary small" id="open-folder" title="Open folder (Ctrl+Shift+O)">Open…</button>
+          <div class="dropdown" id="open">
+            <button type="button" class="tertiary small" popovertarget="open-menu">Open</button>
+            <div id="open-menu" popover>
+              <ul>
+                <li><button type="button" data-open="folder">Open folder… <kbd>Ctrl+Shift+O</kbd></button></li>
+                <li><button type="button" data-open="file">Open file… <kbd>Ctrl+O</kbd></button></li>
+              </ul>
+              <section id="recent-folders" hidden>
+                <h2>Recent folders</h2>
+                <ul></ul>
+              </section>
+              <section id="recent-files" hidden>
+                <h2>Recent files</h2>
+                <ul></ul>
+              </section>
+            </div>
+          </div>
         </header>
         <nav class="tabs" aria-label="Sidebar">
           <ul>

@@ -3,7 +3,7 @@ import "./styles.css";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { documentDir } from "@tauri-apps/api/path";
+import { documentDir, homeDir } from "@tauri-apps/api/path";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { EditorView } from "@codemirror/view";
@@ -41,7 +41,16 @@ import { HistoryDialog } from "./history";
 import { openShortcuts } from "./shortcuts";
 import { Outline } from "./outline";
 import { baseName, dirName, isAbsolute, resolve } from "./paths";
-import { type Settings, flushSettings, loadSettings, settings, updateSettings } from "./settings";
+import { addRecent, displayDir, removeRecent } from "./recent";
+import {
+  type Settings,
+  flushSettings,
+  loadSettings,
+  settings,
+  storedSettings,
+  updateSettings,
+  updateStoredSetting,
+} from "./settings";
 import { FileTree } from "./tree";
 
 const MARKDOWN_EXTENSIONS = ["md", "markdown", "txt"];
@@ -60,6 +69,7 @@ const modeLabel = document.getElementById("mode")!;
 const themeButton = document.getElementById("theme-toggle") as HTMLButtonElement;
 const historyButton = document.getElementById("history-button") as HTMLButtonElement;
 const exportMenu = document.getElementById("export")!;
+const openMenu = document.getElementById("open-menu")!;
 
 let folder: string | null = null;
 let doc: Doc | null = null;
@@ -103,7 +113,8 @@ const history = new HistoryDialog((text) => {
 
 // --- Folder and file handling -------------------------------------------------
 
-async function openFolder(path: string): Promise<void> {
+/** `remember` adds it to the recent folders: only for folders the user chose. */
+async function openFolder(path: string, remember = false): Promise<void> {
   folder = path;
   folderName.textContent = baseName(path);
   folderName.title = path;
@@ -111,6 +122,7 @@ async function openFolder(path: string): Promise<void> {
   await refreshTree();
   await watchFolder(path);
   updateSettings({ folder: path });
+  if (remember) rememberRecent("recentFolders", path);
 }
 
 async function refreshTree(): Promise<void> {
@@ -129,16 +141,31 @@ async function refreshTree(): Promise<void> {
 // sliceDoc, unlike doc.toString(), keeps the file's own line endings.
 const editorText = () => view.state.sliceDoc();
 
-async function openFile(path: string): Promise<void> {
-  if (doc?.path === path) return;
-  let opened: { doc: Doc; contents: string };
-  try {
-    opened = await Doc.open(path, editorText, renderState);
-  } catch (e) {
-    showError(`Could not open ${path}: ${e}`);
-    return;
+interface OpenOptions {
+  /** Opened on its own (not from the tree): add it to the recent files. */
+  recent?: boolean;
+  /** Show the file's folder in the sidebar, unless the open folder already holds it. */
+  showFolder?: boolean;
+}
+
+/** False if it couldn't be opened or the user cancelled. */
+async function openFile(path: string, options: OpenOptions = {}): Promise<boolean> {
+  if (doc?.path !== path) {
+    let opened: { doc: Doc; contents: string };
+    try {
+      opened = await Doc.open(path, editorText, renderState);
+    } catch (e) {
+      showError(`Could not open ${path}: ${e}`);
+      return false;
+    }
+    if (!(await releaseDocument())) return false;
+    if (options.showFolder && !(folder && isInside(path, folder))) {
+      await openFolder(dirName(path)).catch(() => undefined);
+    }
+    showDocument(opened.doc, opened.contents);
   }
-  if (await releaseDocument()) showDocument(opened.doc, opened.contents);
+  if (options.recent) rememberRecent("recentFiles", path);
+  return true;
 }
 
 function showDocument(next: Doc, contents: string): void {
@@ -328,6 +355,7 @@ async function saveDocumentAs(): Promise<boolean> {
     showError(`Could not save ${baseName(target)}: ${e}`);
     return false;
   }
+  rememberRecent("recentFiles", target);
   if (doc !== current) return true;
   if (folder) await refreshTree();
   else await openFolder(dirName(target)).catch(() => undefined);
@@ -387,7 +415,7 @@ async function openLink(href: string): Promise<void> {
   const target = safeDecode(href.split(/[?#]/)[0]);
   if (!target || !doc) return; // e.g. "#heading": in-page anchors aren't supported yet
   const path = isAbsolute(target) ? target : resolve(dirName(doc.path), target);
-  if (DOCUMENT_FILE.test(path)) await openFile(path);
+  if (DOCUMENT_FILE.test(path)) await openFile(path, { recent: true });
   else showError(`Tyset only opens web links and markdown files: ${href}`);
 }
 
@@ -398,7 +426,7 @@ void getCurrentWebview().onDragDropEvent(async (event) => {
   const documentPath = paths.find((p) => DOCUMENT_FILE.test(p));
   const images = paths.filter((p) => IMAGE_FILE.test(p));
   if (!images.length) {
-    if (documentPath) await openFile(documentPath);
+    if (documentPath) await openFile(documentPath, { recent: true });
     return;
   }
   if (!doc || !(await ensureSaved())) return;
@@ -497,11 +525,84 @@ async function openHistory(): Promise<void> {
   await history.open(doc.path, doc.name);
 }
 
+// --- Open menu and recent items -------------------------------------------------
+
+type RecentKey = "recentFiles" | "recentFolders";
+
+function rememberRecent(key: RecentKey, path: string): void {
+  void updateStoredSetting(key, (list) => addRecent(list, path));
+}
+
+function forgetRecent(key: RecentKey, path: string): void {
+  void updateStoredSetting(key, (list) => removeRecent(list, path));
+}
+
+const home = homeDir().catch(() => null);
+
+/** Fill the recent lists as the menu opens. Missing entries are hidden but kept, e.g. for unmounted drives. */
+async function renderRecent(): Promise<void> {
+  const [homePath, stored] = await Promise.all([home, storedSettings()]);
+  const sections = [
+    { key: "recentFolders" as const, id: "recent-folders" },
+    { key: "recentFiles" as const, id: "recent-files" },
+  ];
+  await Promise.all(
+    sections.map(async ({ key, id }) => {
+      const list = stored[key];
+      const exists = await Promise.all(list.map((p) => pathExists(p).catch(() => false)));
+      const items = list.filter((_, i) => exists[i]).map((path) => recentItem(key, path, homePath));
+      const section = document.getElementById(id)!;
+      section.querySelector("ul")!.replaceChildren(...items);
+      section.hidden = !items.length;
+    }),
+  );
+}
+
+function recentItem(key: RecentKey, path: string, homePath: string | null): HTMLLIElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.recent = key;
+  button.dataset.path = path;
+  button.title = path;
+  const name = document.createElement("span");
+  name.textContent = baseName(path);
+  const dir = document.createElement("small");
+  dir.textContent = displayDir(dirName(path), homePath);
+  button.append(name, dir);
+  const li = document.createElement("li");
+  li.append(button);
+  return li;
+}
+
+async function openRecent(key: RecentKey, path: string): Promise<void> {
+  if (!(await pathExists(path).catch(() => false))) {
+    showError(`${baseName(path)} no longer exists`);
+    forgetRecent(key, path);
+    return;
+  }
+  if (key === "recentFolders") await openFolder(path, true);
+  else await openFile(path, { recent: true, showFolder: true });
+}
+
+openMenu.addEventListener("beforetoggle", (e) => {
+  if ((e as ToggleEvent).newState === "open") void renderRecent();
+});
+
+openMenu.addEventListener("click", (e) => {
+  const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
+  if (!button) return;
+  openMenu.hidePopover();
+  const { open: action, recent, path } = button.dataset;
+  if (action === "folder") void pickFolder();
+  else if (action === "file") void pickFile();
+  else if ((recent === "recentFiles" || recent === "recentFolders") && path) void openRecent(recent, path);
+});
+
 // --- Commands -----------------------------------------------------------------
 
 async function pickFolder(): Promise<void> {
   const path = await open({ directory: true });
-  if (typeof path === "string") await openFolder(path);
+  if (typeof path === "string") await openFolder(path, true);
 }
 
 async function pickFile(): Promise<void> {
@@ -509,10 +610,8 @@ async function pickFile(): Promise<void> {
     defaultPath: folder ?? undefined,
     filters: [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
   });
-  if (typeof path === "string") await openFile(path);
+  if (typeof path === "string") await openFile(path, { recent: true });
 }
-
-document.getElementById("open-folder")!.addEventListener("click", () => void pickFolder());
 
 document.getElementById("shortcuts-button")!.addEventListener("click", openShortcuts);
 
@@ -598,7 +697,7 @@ async function start(): Promise<void> {
   const cliPath = BLANK_WINDOW ? null : await initialPath();
   if (cliPath) {
     await openFolder(dirName(cliPath));
-    await openFile(cliPath);
+    await openFile(cliPath, { recent: true });
     return;
   }
   // Start with an empty document, no folder. Only the first window picks up a leftover draft.

@@ -9,6 +9,9 @@ export interface Settings {
   sidebarTab: "files" | "outline";
   /** The last opened folder: where Save As starts when no folder is open. */
   folder: string | null;
+  /** Files opened on their own (not from the tree) and folders opened explicitly, newest first. */
+  recentFiles: string[];
+  recentFolders: string[];
 }
 
 const defaults: Settings = {
@@ -17,6 +20,8 @@ const defaults: Settings = {
   sidebar: true,
   sidebarTab: "files",
   folder: null,
+  recentFiles: [],
+  recentFolders: [],
 };
 
 const SAVE_DELAY_MS = 300;
@@ -34,6 +39,29 @@ export async function loadSettings(): Promise<Settings> {
     current = { ...defaults }; // unreadable settings must not stop the app
   }
   return current;
+}
+
+/**
+ * Change one setting based on its stored value rather than this window's copy,
+ * so windows add to each other's lists (e.g. recent files) instead of replacing them.
+ */
+export async function updateStoredSetting<K extends keyof Settings>(
+  key: K,
+  change: (value: Settings[K]) => Settings[K],
+): Promise<void> {
+  await flushSettings();
+  const value = (await storedSettings())[key];
+  updateSettings({ [key]: change(value) } as Partial<Settings>);
+}
+
+/** Settings as last written by any window, without changing this window's copy. */
+export async function storedSettings(): Promise<Settings> {
+  try {
+    const stored = await invoke<Partial<Settings> | null>("load_settings");
+    return { ...current, ...pending, ...(stored ?? {}) };
+  } catch {
+    return current;
+  }
 }
 
 export function settings(): Readonly<Settings> {

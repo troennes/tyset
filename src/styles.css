@@ -216,6 +216,48 @@
     }
   }
 
+  /* Sidebar Open menu with recent folders and files (src/main.ts). */
+  #open-menu {
+    --dropdown-max-width: min(26rem, calc(100vw - var(--space-m)));
+    inset-inline: anchor(left) auto;
+
+    section > ul {
+      margin: 0;
+    }
+
+    h2 {
+      margin: 0;
+      padding: var(--space-3xs) var(--space-2xs);
+      font-size: var(--size-tiny);
+      font-weight: var(--font-weight);
+      color: var(--color-text-muted);
+    }
+
+    [data-recent] {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-xs);
+      max-width: 100%;
+
+      span,
+      small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      span {
+        flex: none;
+        max-width: 60%;
+      }
+
+      small {
+        color: var(--color-text-muted);
+      }
+    }
+  }
+
+  #open-menu kbd,
   #export-menu kbd {
     margin-inline-start: var(--space-s);
     font-size: var(--size-tiny);
