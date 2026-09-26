@@ -7,9 +7,8 @@ export interface Settings {
   sourceMode: boolean;
   sidebar: boolean;
   sidebarTab: "files" | "outline";
-  /** Restored when the app starts. */
+  /** The last opened folder: where Save As starts when no folder is open. */
   folder: string | null;
-  file: string | null;
 }
 
 const defaults: Settings = {
@@ -18,7 +17,6 @@ const defaults: Settings = {
   sidebar: true,
   sidebarTab: "files",
   folder: null,
-  file: null,
 };
 
 const SAVE_DELAY_MS = 300;

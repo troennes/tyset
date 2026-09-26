@@ -1,6 +1,7 @@
 // One open document: its path, what is known to be on disk, and auto-save.
+// A draft (untitled document) is a file in the app's drafts folder until it is saved as a real file.
 import { ask } from "@tauri-apps/plugin-dialog";
-import { pathExists, readFile, writeFile } from "./api";
+import { discardDraft, pathExists, readFile, saveDraftAs, writeFile } from "./api";
 
 const AUTOSAVE_DELAY_MS = 1000;
 
@@ -25,8 +26,24 @@ export class Doc {
     contents: string,
     private readonly getText: () => string,
     private readonly onStateChange: (doc: Doc) => void,
+    private isDraft = false,
   ) {
     this.onDisk = contents;
+  }
+
+  /** A new, empty draft; its file is written once there is text to save. */
+  static draft(path: string, getText: () => string, onStateChange: (doc: Doc) => void): Doc {
+    return new Doc(path, "", getText, onStateChange, true);
+  }
+
+  /** A draft left behind earlier (e.g. by a crash). */
+  static async recover(
+    path: string,
+    getText: () => string,
+    onStateChange: (doc: Doc) => void,
+  ): Promise<{ doc: Doc; contents: string }> {
+    const contents = await readFile(path);
+    return { doc: new Doc(path, contents, getText, onStateChange, true), contents };
   }
 
   static async open(
@@ -49,7 +66,37 @@ export class Doc {
   }
 
   get name(): string {
-    return this.path.split(/[\\/]/).pop() ?? this.path;
+    return this.isDraft ? "Untitled" : (this.path.split(/[\\/]/).pop() ?? this.path);
+  }
+
+  get draft(): boolean {
+    return this.isDraft;
+  }
+
+  /** Save a draft as the real file `target`, which it then keeps editing. */
+  saveAs(target: string): Promise<void> {
+    window.clearTimeout(this.timer);
+    this.timer = undefined;
+    // Chained after any write in flight, so no auto-save can land in between.
+    const saved = this.writing.then(async () => {
+      const text = this.getText();
+      await saveDraftAs(this.path, target, text);
+      this.currentPath = target;
+      this.isDraft = false;
+      this.onDisk = text;
+      this.error = null;
+      this.setState(this.dirty ? "pending" : "saved");
+    });
+    this.writing = saved.catch(() => undefined);
+    return saved;
+  }
+
+  /** Delete a draft the user doesn't want to keep. */
+  async discard(): Promise<void> {
+    window.clearTimeout(this.timer);
+    this.prompting = true; // no more auto-saves
+    await this.writing;
+    await discardDraft(this.path);
   }
 
   get dirty(): boolean {

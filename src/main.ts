@@ -3,24 +3,28 @@ import "./styles.css";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask, open, save } from "@tauri-apps/plugin-dialog";
+import { documentDir } from "@tauri-apps/api/path";
+import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { EditorView } from "@codemirror/view";
 
 import {
-  createFile,
+  createDraft,
   importImageFile,
   initialPath,
   listTree,
   newWindow,
   onFsChange,
   pasteClipboardImage,
+  pathExists,
+  recoverDraft,
   renamePath,
   trashPath,
   watchDocument,
   watchFolder,
 } from "./api";
 import { Doc } from "./document";
+import { suggestFileName } from "./drafts";
 import {
   type EditorHost,
   createEditor,
@@ -44,7 +48,7 @@ const DOCUMENT_FILE = /\.(md|markdown|txt)$/i;
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const TREE_REFRESH_DELAY_MS = 200;
-/** Windows opened with Ctrl+Shift+N start empty instead of restoring the last folder. */
+/** Windows opened with Ctrl+Shift+N always start with a new draft (no crash recovery). */
 const BLANK_WINDOW = new URLSearchParams(location.search).has("blank");
 
 const appWindow = getCurrentWindow();
@@ -69,7 +73,7 @@ const host: EditorHost = {
   },
   openLink: (href) => void openLink(href),
   pasteImage: async () => {
-    if (!doc) return null;
+    if (!doc || !(await ensureSaved())) return null;
     try {
       return await pasteClipboardImage(doc.path);
     } catch (e) {
@@ -121,28 +125,38 @@ async function refreshTree(): Promise<void> {
   }
 }
 
+// sliceDoc, unlike doc.toString(), keeps the file's own line endings.
+const editorText = () => view.state.sliceDoc();
+
 async function openFile(path: string): Promise<void> {
   if (doc?.path === path) return;
-  await doc?.save();
+  let opened: { doc: Doc; contents: string };
   try {
-    // sliceDoc, unlike doc.toString(), keeps the file's own line endings.
-    const opened = await Doc.open(path, () => view.state.sliceDoc(), renderState);
-    doc = opened.doc;
-    loadDocument(view, opened.contents, host);
+    opened = await Doc.open(path, editorText, renderState);
   } catch (e) {
     showError(`Could not open ${path}: ${e}`);
     return;
   }
+  if (await releaseDocument()) showDocument(opened.doc, opened.contents);
+}
+
+function showDocument(next: Doc, contents: string): void {
+  doc = next;
+  loadDocument(view, contents, host);
   shell.classList.add("has-doc");
   historyButton.hidden = false;
   exportMenu.hidden = false;
-  tree.setCurrent(path);
+  tree.setCurrent(next.draft ? null : next.path);
   outline.refresh();
-  renderState(doc);
-  updateSettings({ file: path });
-  // The folder watcher covers files inside it; watch anything else separately.
-  void watchDocument(folder && isInside(path, folder) ? null : path).catch(() => undefined);
+  renderState(next);
+  watchOpenDocument();
   view.focus();
+}
+
+/** The folder watcher covers files inside it; watch anything else (e.g. a draft) separately. */
+function watchOpenDocument(): void {
+  const path = doc?.path ?? null;
+  void watchDocument(path && !(folder && isInside(path, folder)) ? path : null).catch(() => undefined);
 }
 
 /** Close the open document (e.g. it was moved to the trash). */
@@ -155,7 +169,6 @@ function closeDocument(): void {
   status.textContent = "";
   tree.setCurrent(null);
   outline.refresh();
-  updateSettings({ file: null });
   void watchDocument(null).catch(() => undefined);
   void appWindow.setTitle("Tyset");
 }
@@ -180,7 +193,6 @@ async function renameEntry(path: string, name: string): Promise<void> {
     if (current) {
       current.moveTo(newPath + oldDocPath.slice(path.length));
       tree.setCurrent(current.path);
-      updateSettings({ file: current.path });
     }
     if (folder === path) await openFolder(newPath); // renamed the open folder itself
   } catch (e) {
@@ -207,6 +219,7 @@ async function trashEntry(path: string, isFolder: boolean): Promise<void> {
     showError(String(e));
   }
   await refreshTree();
+  if (!doc) await newDraft();
 }
 
 onFsChange(async ({ paths }) => {
@@ -221,22 +234,105 @@ onFsChange(async ({ paths }) => {
   }
 });
 
-// --- New files and windows -------------------------------------------------------
+// --- New documents and drafts ----------------------------------------------------
+// A new document is a draft: an untitled file in the app's drafts folder, auto-saved
+// like any other. Saving it (Ctrl+S) asks for a name and moves it there.
 
 async function newFile(): Promise<void> {
-  const dir = folder ?? (doc ? dirName(doc.path) : undefined);
-  const path = await save({
-    defaultPath: dir ? resolve(dir, "Untitled.md") : "Untitled.md",
+  if (await releaseDocument()) await newDraft();
+}
+
+async function newDraft(): Promise<void> {
+  try {
+    showDocument(Doc.draft(await createDraft(), editorText, renderState), "");
+  } catch (e) {
+    showError(`Could not create a new document: ${e}`);
+  }
+}
+
+/** Reopen a draft left behind (e.g. by a crash). False if there is none. */
+async function recoverLeftoverDraft(): Promise<boolean> {
+  try {
+    const path = await recoverDraft();
+    if (!path) return false;
+    const recovered = await Doc.recover(path, editorText, renderState);
+    showDocument(recovered.doc, recovered.contents);
+    status.textContent = "Recovered unsaved draft";
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Let go of the open document before showing another or closing: a file is saved,
+ * an empty draft is dropped, and for a draft with text the user chooses.
+ * False means stay (the user cancelled).
+ */
+async function releaseDocument(): Promise<boolean> {
+  if (!doc) return true;
+  if (!doc.draft) {
+    await doc.save();
+    return true;
+  }
+  if (view.state.sliceDoc().trim()) {
+    const choice = await message("Do you want to save this document?", {
+      title: "Unsaved document",
+      kind: "warning",
+      buttons: { yes: "Save…", no: "Don’t Save", cancel: "Cancel" },
+    });
+    if (choice === "Save…" || choice === "Yes") return saveDocumentAs();
+    if (choice !== "Don’t Save" && choice !== "No") return false;
+  }
+  await doc.discard().catch((e) => showError(`Could not delete the draft: ${e}`));
+  return true;
+}
+
+/** A draft must be saved as a file first, e.g. so pasted images have a folder. False if cancelled. */
+async function ensureSaved(): Promise<boolean> {
+  return !doc?.draft || saveDocumentAs();
+}
+
+/** Where Save As and export dialogs start. */
+async function defaultPath(name: string): Promise<string> {
+  const dir = folder ?? settings().folder ?? (await documentDir().catch(() => null));
+  return dir ? resolve(dir, name) : name;
+}
+
+/** Ask where to save the draft, then move it there. False if cancelled or it failed. */
+async function saveDocumentAs(): Promise<boolean> {
+  const current = doc;
+  if (!current?.draft) return true;
+  let target = await save({
+    defaultPath: await defaultPath(suggestFileName(view.state.sliceDoc())),
     filters: [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
   });
-  if (!path) return;
-  try {
-    await createFile(path);
-  } catch (e) {
-    showError(`Could not create ${path}: ${e}`);
-    return;
+  if (!target) return false;
+  if (!DOCUMENT_FILE.test(target)) {
+    // The dialog only confirmed replacing the name as typed.
+    target += ".md";
+    const replace =
+      !(await pathExists(target)) ||
+      (await ask(`${baseName(target)} already exists. Replace it?`, {
+        title: "Save",
+        kind: "warning",
+        okLabel: "Replace",
+        cancelLabel: "Cancel",
+      }));
+    if (!replace) return false;
   }
-  await openFile(path);
+  try {
+    await current.saveAs(target);
+  } catch (e) {
+    showError(`Could not save ${baseName(target)}: ${e}`);
+    return false;
+  }
+  if (doc !== current) return true;
+  if (folder) await refreshTree();
+  else await openFolder(dirName(target)).catch(() => undefined);
+  tree.setCurrent(target);
+  watchOpenDocument();
+  return true;
 }
 
 // --- Export -------------------------------------------------------------------
@@ -244,7 +340,9 @@ async function newFile(): Promise<void> {
 async function exportHtml(): Promise<void> {
   if (!doc) return;
   const path = await save({
-    defaultPath: doc.path.replace(/\.(md|markdown|txt)$/i, "") + ".html",
+    defaultPath: doc.draft
+      ? await defaultPath(suggestFileName(view.state.sliceDoc()).replace(/\.md$/, ".html"))
+      : doc.path.replace(/\.(md|markdown|txt)$/i, "") + ".html",
     filters: [{ name: "HTML", extensions: ["html"] }],
   });
   if (!path) return;
@@ -302,7 +400,7 @@ void getCurrentWebview().onDragDropEvent(async (event) => {
     if (documentPath) await openFile(documentPath);
     return;
   }
-  if (!doc) return;
+  if (!doc || !(await ensureSaved())) return;
   const ratio = window.devicePixelRatio || 1;
   const at = view.posAtCoords({ x: position.x / ratio, y: position.y / ratio }) ?? undefined;
   for (const image of images.reverse()) {
@@ -318,10 +416,13 @@ void getCurrentWebview().onDragDropEvent(async (event) => {
 
 function renderState(d: Doc): void {
   if (d !== doc) return;
-  const label = { saved: "Saved", pending: "Edited", saving: "Saving…", error: `Save failed: ${d.error}` }[d.state];
+  const saved = d.draft ? "Draft" : "Saved";
+  const label = { saved, pending: "Edited", saving: "Saving…", error: `Save failed: ${d.error}` }[d.state];
   status.textContent = label;
   status.classList.toggle("error", d.state === "error");
-  void appWindow.setTitle(`${d.state === "saved" ? "" : "• "}${d.name} — Tyset`);
+  // A draft with text is unsaved until it has a name, however recently it was backed up.
+  const unsaved = d.state !== "saved" || (d.draft && view.state.doc.length > 0);
+  void appWindow.setTitle(`${unsaved ? "• " : ""}${d.name} — Tyset`);
 }
 
 function showError(message: string): void {
@@ -417,6 +518,10 @@ window.addEventListener("keydown", (e) => {
   if (e.key !== "F2" || e.ctrlKey || e.altKey || e.metaKey || !doc) return;
   if ((e.target as HTMLElement).closest("#tree")) return;
   e.preventDefault();
+  if (doc.draft) {
+    void saveDocumentAs();
+    return;
+  }
   setSidebar(true);
   showSidebarTab("files");
   tree.setCurrent(doc.path);
@@ -431,7 +536,7 @@ window.addEventListener(
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const key = e.key.toLowerCase();
     const command =
-      key === "s" && !e.shiftKey ? () => doc?.save()
+      key === "s" && !e.shiftKey ? () => (doc?.draft ? saveDocumentAs() : doc?.save())
       : key === "o" && !e.shiftKey ? pickFile
       : key === "o" && e.shiftKey ? pickFolder
       : key === "n" && !e.shiftKey ? newFile
@@ -455,6 +560,10 @@ window.addEventListener(
 // Never lose edits: save when the window loses focus and before it closes.
 window.addEventListener("blur", () => void doc?.save());
 void appWindow.onCloseRequested(async (event) => {
+  if (doc?.draft && !(await releaseDocument())) {
+    event.preventDefault();
+    return;
+  }
   await Promise.all([doc?.save(), flushSettings()]);
   if (doc?.state !== "error") return;
   const close = await ask(`Could not save ${doc.name}: ${doc.error}\n\nClose anyway and lose your edits?`, {
@@ -475,16 +584,15 @@ async function start(): Promise<void> {
   showSidebarTab(saved.sidebarTab, false);
   if (saved.sourceMode) setSourceMode(view, host, true);
   renderMode();
-  if (BLANK_WINDOW) return;
 
-  const cliPath = await initialPath();
+  const cliPath = BLANK_WINDOW ? null : await initialPath();
   if (cliPath) {
     await openFolder(dirName(cliPath));
     await openFile(cliPath);
     return;
   }
-  if (saved.folder) await openFolder(saved.folder).catch(() => undefined);
-  if (saved.file) await openFile(saved.file);
+  // Start with an empty document, no folder. Only the first window picks up a leftover draft.
+  if (BLANK_WINDOW || !(await recoverLeftoverDraft())) await newDraft();
 }
 
 void start();

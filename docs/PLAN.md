@@ -37,7 +37,7 @@ only the features we actually use.
 │ watcher (notify): tree updates, external changes        │
 │ assets: copy dropped/pasted images → ./assets           │
 │ export: comrak → HTML (+ inlined CSS) → print for PDF   │
-│ settings, last folder, window state; links → browser    │
+│ drafts; settings, last folder; links → browser          │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -47,7 +47,9 @@ only the features we actually use.
 - Open a folder; left sidebar shows a tree of `.md`/`.markdown`/`.txt` files, plus an
   outline tab built from the document's headings.
 - One document per window. Ctrl+Shift+N opens a new window.
-- New file (Ctrl+N); rename (F2, or right-click) and move to trash (Delete, or right-click)
+- Tyset starts with an empty untitled document and no folder (a file given on the command
+  line opens instead). Ctrl+N and Ctrl+Shift+N also start untitled documents.
+- Rename (F2, or right-click) and move to trash (Delete, or right-click)
   from the tree. Renaming the open file or its folder keeps editing it, and its local
   history moves with it.
 
@@ -58,6 +60,13 @@ only the features we actually use.
 - **Local history:** the last N versions of each file are kept in the app data dir as a
   safety net against unwanted auto-saves.
 - External change: reload silently if there are no pending edits; otherwise ask.
+- **Untitled documents (drafts)** are real files in `<app data>/drafts/`, auto-saved like any
+  other. Ctrl+S (or F2) opens Save As with a name taken from the first heading or line, and
+  moves the draft there together with its history. Closing a draft with text, or opening
+  another file over it, asks Save / Don't Save / Cancel. An empty draft goes away silently.
+  Pasting or dropping an image asks to save first, so `./assets/` has a folder.
+- Drafts left behind by a crash come back: at startup, the first window reopens the newest
+  one. OS file locks (`.name.lock`) stop two windows or processes from claiming the same draft.
 
 ### Editing
 - Live preview: markdown syntax is hidden except on the line/element under the cursor.

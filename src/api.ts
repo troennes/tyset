@@ -49,9 +49,6 @@ export const listHistory = (path: string) => invoke<Snapshot[]>("list_history", 
 
 export const readHistory = (path: string, id: string) => invoke<string>("read_history", { path, id });
 
-/** Create an empty file; an existing file is left as it is. */
-export const createFile = (path: string) => invoke<void>("create_file", { path });
-
 /** Watch the folder of a document outside the open folder; null stops watching. */
 export const watchDocument = (path: string | null) => invoke<void>("watch_document", { path });
 
@@ -64,3 +61,16 @@ export const renamePath = (path: string, name: string) => invoke<string>("rename
 
 /** Move a file or folder to the system trash. */
 export const trashPath = (path: string) => invoke<void>("trash_path", { path });
+
+/** A path for a new untitled document in the app's drafts folder (written on the first save). */
+export const createDraft = () => invoke<string>("create_draft");
+
+/** The newest draft no window has open (e.g. left by a crash), or null. */
+export const recoverDraft = () => invoke<string | null>("recover_draft");
+
+/** Write a draft's text to `target` and delete the draft. */
+export const saveDraftAs = (path: string, target: string, contents: string) =>
+  invoke<void>("save_draft_as", { path, target, contents });
+
+/** Delete a draft the user chose not to keep. */
+export const discardDraft = (path: string) => invoke<void>("discard_draft", { path });

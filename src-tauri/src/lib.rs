@@ -1,6 +1,7 @@
 //! Tauri commands: the page's only access to files, the clipboard and windows.
 
 mod assets;
+mod drafts;
 mod export;
 mod files;
 mod history;
@@ -24,6 +25,8 @@ struct AppState {
     /// File passed on the command line; handed out once to the first window.
     initial_path: Mutex<Option<String>>,
     windows_opened: AtomicUsize,
+    /// Per window label: the draft it is editing, so crash recovery never takes an open one.
+    drafts: Mutex<HashMap<String, drafts::Claim>>,
 }
 
 type CommandResult<T> = Result<T, String>;
@@ -62,16 +65,6 @@ fn write_file(app: AppHandle, path: String, contents: String) -> CommandResult<(
     files::atomic_write(path, contents.as_bytes()).map_err(err)
 }
 
-/// Create an empty file, or leave an existing one untouched.
-#[tauri::command]
-fn create_file(path: String) -> CommandResult<()> {
-    match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
-        Ok(_) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(err(e)),
-    }
-}
-
 /// Rename a file or folder in place; returns the new path. A file's local history moves with it.
 #[tauri::command]
 fn rename_path(app: AppHandle, path: String, name: String) -> CommandResult<String> {
@@ -100,6 +93,77 @@ fn path_exists(path: String) -> bool {
 #[tauri::command]
 fn initial_path(state: State<AppState>) -> Option<String> {
     state.initial_path.lock().unwrap().take()
+}
+
+// --- Drafts -------------------------------------------------------------------
+
+fn drafts_dir(app: &AppHandle) -> CommandResult<PathBuf> {
+    Ok(app.path().app_data_dir().map_err(err)?.join("drafts"))
+}
+
+/// A path for a new untitled document, claimed by the calling window.
+#[tauri::command]
+fn create_draft(window: WebviewWindow, state: State<AppState>) -> CommandResult<String> {
+    let path = drafts::new_path(&drafts_dir(window.app_handle())?, &assets::timestamp()).map_err(err)?;
+    let claim = drafts::claim(&path).map_err(err)?.ok_or("the new draft is already open")?;
+    state.drafts.lock().unwrap().insert(window.label().to_string(), claim);
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// The newest draft no window has open (left behind by a crash), claimed by the calling window.
+#[tauri::command]
+fn recover_draft(window: WebviewWindow, state: State<AppState>) -> CommandResult<Option<String>> {
+    let mut claims = state.drafts.lock().unwrap();
+    claims.remove(window.label());
+    let Some(claim) = drafts::recover(&drafts_dir(window.app_handle())?) else { return Ok(None) };
+    let path = claim.path.to_string_lossy().into_owned();
+    claims.insert(window.label().to_string(), claim);
+    Ok(Some(path))
+}
+
+fn checked_draft(app: &AppHandle, path: &str) -> CommandResult<PathBuf> {
+    let path = PathBuf::from(path);
+    if drafts::is_draft(&drafts_dir(app)?, &path) {
+        Ok(path)
+    } else {
+        Err(format!("Not a draft: {}", path.display()))
+    }
+}
+
+/// Save a draft's `contents` as `target` and delete the draft; its local history moves along.
+/// An existing `target` (the save dialog confirmed replacing it) is kept in history first.
+#[tauri::command]
+fn save_draft_as(
+    window: WebviewWindow,
+    state: State<AppState>,
+    path: String,
+    target: String,
+    contents: String,
+) -> CommandResult<()> {
+    let app = window.app_handle();
+    let from = checked_draft(app, &path)?;
+    let target = Path::new(&target);
+    if let (Ok(old), Some(root)) = (fs::read(target), history_root(app)) {
+        let _ = history::snapshot(&root, &canonical(target), &old);
+    }
+    let old_key = canonical(&from);
+    drafts::save_as(&from, target, contents.as_bytes()).map_err(err)?;
+    if let Some(root) = history_root(app) {
+        let _ = history::relocate(&root, &old_key, &canonical(target));
+    }
+    state.drafts.lock().unwrap().remove(window.label());
+    Ok(())
+}
+
+/// Delete a draft the user chose not to keep (its local history stays as a safety net).
+#[tauri::command]
+fn discard_draft(window: WebviewWindow, state: State<AppState>, path: String) -> CommandResult<()> {
+    let from = checked_draft(window.app_handle(), &path)?;
+    state.drafts.lock().unwrap().remove(window.label());
+    match fs::remove_file(from) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(err(e)),
+        _ => Ok(()),
+    }
 }
 
 // --- Local history --------------------------------------------------------------
@@ -258,17 +322,21 @@ pub fn run() {
                 let state = window.state::<AppState>();
                 state.folder_watchers.lock().unwrap().remove(window.label());
                 state.document_watchers.lock().unwrap().remove(window.label());
+                state.drafts.lock().unwrap().remove(window.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
             list_tree,
             read_file,
             write_file,
-            create_file,
             path_exists,
             rename_path,
             trash_path,
             initial_path,
+            create_draft,
+            recover_draft,
+            save_draft_as,
+            discard_draft,
             list_history,
             read_history,
             load_settings,
