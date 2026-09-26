@@ -53,6 +53,7 @@ const columns: [title: string, shortcuts: Shortcut[]][][] = [
         ["Paragraph", "Ctrl+0"],
         ["Link", "Ctrl+K"],
         ["Accordion", "Ctrl+Shift+D"],
+        ["Alert (press again for next kind)", "Ctrl+Shift+A"],
         ["Table", "Ctrl+T"],
         ["Paste image", "Ctrl+V"],
         ["Open link", "Ctrl+Click"],

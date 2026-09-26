@@ -1,6 +1,8 @@
 // Widgets drawn in place of markdown syntax by the live preview.
 import { EditorView, WidgetType } from "@codemirror/view";
 
+import { type AlertKind, ALERTS } from "../alerts";
+
 export class BulletWidget extends WidgetType {
   eq(): boolean {
     return true;
@@ -63,16 +65,7 @@ export class ImageWidget extends WidgetType {
   }
 }
 
-export type AlertKind = "note" | "tip" | "important" | "warning" | "caution";
-
-const ALERT_LABELS: Record<AlertKind, string> = {
-  note: "Note",
-  tip: "Tip",
-  important: "Important",
-  warning: "Warning",
-  caution: "Caution",
-};
-
+/** The alert's first line, `> [!NOTE]`, as an icon and a label. */
 export class AlertLabelWidget extends WidgetType {
   constructor(readonly kind: AlertKind) {
     super();
@@ -82,8 +75,11 @@ export class AlertLabelWidget extends WidgetType {
   }
   toDOM(): HTMLElement {
     const el = document.createElement("span");
-    el.className = `cm-alert-label cm-alert-label-${this.kind}`;
-    el.textContent = ALERT_LABELS[this.kind];
+    el.className = "cm-alert-label";
+    const icon = document.createElement("span");
+    icon.className = "cm-alert-icon";
+    icon.style.maskImage = ALERTS[this.kind].icon;
+    el.append(icon, ALERTS[this.kind].label);
     return el;
   }
 }

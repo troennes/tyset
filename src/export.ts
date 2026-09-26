@@ -8,6 +8,7 @@ import minium from "@troennes/minium/min?raw";
 import miniumPackage from "@troennes/minium/package.json";
 import prism from "@troennes/minium/integrations/prism.css?raw";
 
+import { type AlertKind, ALERTS } from "./alerts";
 import exportStyles from "./export.css?raw";
 
 /** Elements that could run code, load other pages or break out of the document. */
@@ -15,14 +16,6 @@ const UNSAFE_ELEMENTS =
   "script, style, iframe, frame, frameset, object, embed, applet, noembed, noframes, " +
   "link, meta, base, form, input:not([type=checkbox]), button, textarea, select, title, xmp, plaintext, template";
 const URL_ATTRIBUTES = ["href", "src", "action", "formaction", "xlink:href"];
-
-const ALERT_TONES: Record<string, string> = {
-  note: "info",
-  tip: "success",
-  important: "accent",
-  warning: "warning",
-  caution: "danger",
-};
 
 /**
  * Remove anything that could execute: unsafe elements, event handlers,
@@ -44,7 +37,7 @@ export function sanitize(root: Element): void {
 function styleAlerts(root: Element): void {
   for (const alert of root.querySelectorAll<HTMLElement>(".markdown-alert")) {
     const kind = [...alert.classList].find((c) => c.startsWith("markdown-alert-"))?.slice("markdown-alert-".length);
-    if (kind && ALERT_TONES[kind]) alert.classList.add("alert", ALERT_TONES[kind]);
+    if (kind && kind in ALERTS) alert.classList.add("alert", ALERTS[kind as AlertKind].tone);
   }
 }
 

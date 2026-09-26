@@ -6,10 +6,10 @@ import type { EditorState, Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 
+import { ALERT_TITLE, type AlertKind } from "../alerts";
 import type { EditorHost } from "./host";
 import { destination } from "./links";
 import {
-  type AlertKind,
   AlertLabelWidget,
   BulletWidget,
   CheckboxWidget,
@@ -24,6 +24,8 @@ const unchecked = Decoration.replace({ widget: new CheckboxWidget(false) });
 const hrLine = Decoration.line({ class: "cm-hr" });
 const headingLine = Decoration.line({ class: "cm-heading" });
 const inlineCode = Decoration.mark({ class: "cm-inline-code" });
+const alertFirst = Decoration.line({ class: "cm-alert-first" });
+const alertLast = Decoration.line({ class: "cm-alert-last" });
 
 const INLINE_MARKS: Record<string, string> = {
   Emphasis: "EmphasisMark",
@@ -32,7 +34,6 @@ const INLINE_MARKS: Record<string, string> = {
   InlineCode: "CodeMark",
 };
 
-const ALERT = /^\s*>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/i;
 /** Inline HTML we render; everything else stays as source text. */
 const INLINE_HTML = /^<(kbd|sup|sub|mark)>$/i;
 
@@ -61,6 +62,11 @@ class Builder {
   onLines(from: number, to: number): boolean {
     const { doc } = this.state;
     return this.touches(doc.lineAt(from).from, doc.lineAt(to).to);
+  }
+
+  /** `pos` is in the visible range being built (so a line decoration there is added only once). */
+  visible(pos: number): boolean {
+    return pos >= this.from && pos <= this.to;
   }
 
   hide(from: number, to: number): void {
@@ -147,7 +153,7 @@ class Builder {
 
   /** Space below a heading's last line, whether or not its syntax is showing. */
   private headingSpace(node: SyntaxNode): void {
-    if (node.to >= this.from && node.to <= this.to) this.add(headingLine, this.state.doc.lineAt(node.to).from);
+    if (this.visible(node.to)) this.add(headingLine, this.state.doc.lineAt(node.to).from);
   }
 
   private heading(node: SyntaxNode): boolean {
@@ -214,13 +220,17 @@ class Builder {
   private blockquote(node: SyntaxNode): boolean {
     const { doc } = this.state;
     const firstLine = doc.lineAt(node.from);
-    const alert = ALERT.exec(firstLine.text);
+    const alert = ALERT_TITLE.exec(firstLine.text);
     if (!alert) {
       this.lines(Decoration.line({ class: "cm-quote" }), node.from, node.to);
       return true;
     }
     const kind = alert[1].toLowerCase() as AlertKind;
     this.lines(Decoration.line({ class: `cm-alert cm-alert-${kind}` }), node.from, node.to);
+    // Padding inside the top and bottom of the box (drawn by alertbox.ts).
+    const lastLine = doc.lineAt(node.to);
+    if (this.visible(firstLine.from)) this.add(alertFirst, firstLine.from);
+    if (this.visible(lastLine.from)) this.add(alertLast, lastLine.from);
     if (!this.onLines(firstLine.from, firstLine.to)) {
       const marker = firstLine.text.indexOf("[");
       this.add(

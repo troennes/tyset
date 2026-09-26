@@ -5,6 +5,8 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type ChangeSpec, type EditorState, type StateCommand } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 
+import { ALERT_KINDS, ALERT_TITLE, type AlertKind } from "../alerts";
+
 interface InlineStyle {
   /** Syntax node for the styled span, e.g. StrongEmphasis. */
   node: string;
@@ -211,3 +213,83 @@ export const insertAccordion: StateCommand = ({ state, dispatch }) => {
   );
   return true;
 };
+
+/**
+ * Ctrl+Shift+A: turn the selected blocks (or the cursor's) into a Note alert. Inside an alert,
+ * step to the next kind, and after Caution back to plain text. A plain quote becomes a Note.
+ */
+export const cycleAlert: StateCommand = ({ state, dispatch }) => {
+  const { doc, lineBreak: br } = state;
+  const range = state.selection.main;
+  const quote = outermost(state, range.from, "Blockquote");
+  let changes: ChangeSpec[];
+
+  if (quote) {
+    const title = doc.lineAt(quote.from);
+    const alert = ALERT_TITLE.exec(title.text);
+    const next = alert ? ALERT_KINDS[ALERT_KINDS.indexOf(alert[1].toLowerCase() as AlertKind) + 1] : "note";
+    if (alert && next) {
+      const open = title.from + title.text.indexOf("[!") + 2;
+      changes = [{ from: open, to: open + alert[1].length, insert: next.toUpperCase() }];
+    } else if (next) {
+      changes = [{ from: title.from, insert: `> [!NOTE]${br}` }];
+    } else {
+      // Back to plain text: drop the title line and one level of ">" from the rest.
+      changes = [{ from: title.from, to: Math.min(title.to + br.length, doc.length) }];
+      for (let n = title.number + 1; n <= doc.lineAt(quote.to).number; n++) {
+        const line = doc.line(n);
+        const mark = /^(\s*)> ?/.exec(line.text);
+        if (mark) changes.push({ from: line.from + mark[1].length, to: line.from + mark[0].length });
+      }
+    }
+    dispatch(state.update({ changes, ...formatting }));
+    return true;
+  }
+
+  // Quote whole blocks, so a paragraph's next line isn't left to run on into the alert.
+  let from = doc.lineAt(range.from).from;
+  let to = doc.lineAt(range.to).to;
+  const blocks: SyntaxNode[] = [];
+  for (let block = syntaxTree(state).topNode.firstChild; block; block = block.nextSibling) {
+    if (block.from <= to && block.to >= from) blocks.push(block);
+  }
+  // A blank line keeps the alert apart from the blocks around it (it would join a quote above,
+  // and text below would run on into it).
+  const gap = (n: number) => (n >= 1 && n <= doc.lines && doc.line(n).text.trim() ? br : "");
+  if (!blocks.length) {
+    // Nothing here yet: an empty alert, ready to type in.
+    const line = doc.lineAt(range.from);
+    const insert = `${gap(line.number - 1)}> [!NOTE]${br}> `;
+    dispatch(
+      state.update({
+        changes: { from: line.from, to: line.to, insert: insert + gap(line.number + 1) },
+        selection: EditorSelection.cursor(line.from + insert.length),
+        ...formatting,
+      }),
+    );
+    return true;
+  }
+  from = doc.lineAt(Math.min(from, blocks[0].from)).from;
+  to = doc.lineAt(Math.max(to, blocks[blocks.length - 1].to)).to;
+  changes = [{ from, insert: `${gap(doc.lineAt(from).number - 1)}> [!NOTE]${br}` }];
+  for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
+    const line = doc.line(n);
+    changes.push({ from: line.from, insert: line.text.trim() ? "> " : ">" });
+  }
+  const changeSet = state.changes(changes);
+  const selection = EditorSelection.range(changeSet.mapPos(range.anchor, 1), changeSet.mapPos(range.head, 1));
+  dispatch(state.update({ changes: changeSet, selection, ...formatting }));
+  return true;
+};
+
+/** The outermost `name` node around `pos`, if any. */
+function outermost(state: EditorState, pos: number, name: string): SyntaxNode | null {
+  for (const side of [1, -1] as const) {
+    let found: SyntaxNode | null = null;
+    for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, side); node; node = node.parent) {
+      if (node.name === name) found = node;
+    }
+    if (found) return found;
+  }
+  return null;
+}

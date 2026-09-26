@@ -6,6 +6,8 @@ import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import type { Extension } from "@codemirror/state";
 
+import { ALERTS } from "../alerts";
+
 const base = EditorView.theme({
   "&": { flex: "1", minWidth: "0", backgroundColor: "transparent", color: "var(--color-text)" },
   "&.cm-focused": { outline: "none" },
@@ -32,14 +34,6 @@ const base = EditorView.theme({
   ".cm-panels.cm-panels-top": { borderBottom: "var(--border-width) solid var(--color-border-weak)" },
   ".cm-codeblock": { fontFamily: "var(--font-mono)", backgroundColor: "var(--color-surface-sunken)" },
 });
-
-const alertColours = {
-  note: "info",
-  tip: "success",
-  important: "accent",
-  warning: "warning",
-  caution: "danger",
-} as const;
 
 /** Formatted view with live preview: proportional type, sized headings, widgets. */
 const richStyles = EditorView.theme({
@@ -92,14 +86,41 @@ const richStyles = EditorView.theme({
     paddingInlineStart: "var(--space-s)",
     color: "var(--color-text-muted)",
   },
-  ".cm-line.cm-alert": { paddingInlineStart: "var(--space-s)", borderInlineStart: "3px solid" },
+  // The box around each alert (fill, border, radius, shadow) is drawn behind its lines by
+  // alertbox.ts, like minium's .alert; the lines add its padding and text colour.
+  ".cm-alert-box": {
+    boxSizing: "border-box",
+    borderRadius: "var(--border-radius-m)",
+    border: "var(--border-width) solid",
+    boxShadow: "var(--shadow-medium)",
+  },
+  ".cm-line.cm-alert": { paddingInline: "var(--space-s-m)" },
+  ".cm-line.cm-alert-first": { paddingTop: "var(--space-s-m)" },
+  ".cm-line.cm-alert-last": { paddingBottom: "var(--space-s-m)" },
   ...Object.fromEntries(
-    Object.entries(alertColours).flatMap(([kind, tone]) => [
-      [`.cm-line.cm-alert-${kind}`, { borderColor: `var(--color-${tone})`, backgroundColor: `var(--color-${tone}-fill)` }],
-      [`.cm-alert-label-${kind}`, { color: `var(--color-${tone}-text)` }],
+    Object.entries(ALERTS).flatMap(([kind, { tone }]) => [
+      [
+        `.cm-alert-box-${kind}`,
+        { backgroundColor: `var(--color-${tone}-fill)`, borderColor: `var(--color-${tone}-border-weak)` },
+      ],
+      [`.cm-line.cm-alert-${kind}`, { color: `var(--color-${tone}-text)` }],
     ]),
   ),
+  // As in minium: links take the alert's colour.
+  ".cm-line.cm-alert .cm-link-text": { color: "inherit", textDecorationColor: "currentcolor" },
   ".cm-alert-label": { fontWeight: "var(--font-weight-bold)" },
+  // The icon image is set per kind by the widget.
+  ".cm-alert-icon": {
+    display: "inline-block",
+    width: "1em",
+    height: "1em",
+    marginInlineEnd: "var(--space-xs)",
+    verticalAlign: "-0.125em",
+    backgroundColor: "currentcolor",
+    maskSize: "contain",
+    maskRepeat: "no-repeat",
+    maskPosition: "center",
+  },
 
   ".cm-line.cm-hr": {
     backgroundImage: "linear-gradient(var(--color-border-strong), var(--color-border-strong))",
@@ -214,7 +235,6 @@ const markdownColours = [
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.url, color: "var(--color-primary-text)" },
-  { tag: t.quote, color: "var(--color-text-muted)" },
   { tag: [t.processingInstruction, t.contentSeparator, t.labelName], color: "var(--color-text-muted)" },
   { tag: t.atom, color: "var(--color-accent-text)" },
   { tag: t.comment, color: "var(--syntax-comment)" },
@@ -245,6 +265,8 @@ const richHighlight = HighlightStyle.define([
 
 const sourceHighlight = HighlightStyle.define([
   ...markdownColours,
+  // The rich view colours quotes by line (.cm-quote), so alerts can take their own colour.
+  { tag: t.quote, color: "var(--color-text-muted)" },
   { tag: t.link, color: "var(--color-primary-text)" },
   { tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6], fontWeight: "var(--font-weight-bold)" },
 ]);

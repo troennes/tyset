@@ -6,8 +6,10 @@ import { Annotation, Compartment, EditorState, Prec, type Extension } from "@cod
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 
 import { accordionPreview, accordionState, initialFolds, unfoldAll } from "./accordion";
+import { alertBoxes } from "./alertbox";
 import { codeBlocks } from "./codeblocks";
 import {
+  cycleAlert,
   emphasis,
   inlineCode,
   insertAccordion,
@@ -81,7 +83,7 @@ export function setSourceMode(view: EditorView, host: EditorHost, on: boolean): 
 }
 
 function modeExtensions(host: EditorHost): Extension {
-  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), accordionPreview, tableGrid(host)];
+  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), alertBoxes, accordionPreview, tableGrid(host)];
 }
 
 function newState(text: string, host: EditorHost): EditorState {
@@ -104,6 +106,7 @@ const formattingKeymap = keymap.of([
   { key: "Mod-Shift-'", run: toggleCodeBlock },
   { key: "Mod-k", run: insertLink },
   { key: "Mod-Shift-d", run: insertAccordion },
+  { key: "Mod-Shift-a", run: cycleAlert },
   { key: "Mod-t", run: insertTable },
   ...[0, 1, 2, 3, 4, 5, 6].map((level) => ({ key: `Mod-${level}`, run: setHeading(level) })),
 ]);
