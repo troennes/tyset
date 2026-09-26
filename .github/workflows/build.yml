@@ -1,5 +1,5 @@
 # Test and build Tyset on Linux (.deb) and Windows (NSIS installer).
-# Every push and pull request builds downloadable workflow artifacts.
+# Every push builds downloadable workflow artifacts.
 # Pushing a tag like v0.2.0 also creates a draft GitHub release with both installers.
 name: Build
 
@@ -7,7 +7,6 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  pull_request:
   workflow_dispatch:
 
 permissions:
