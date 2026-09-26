@@ -182,6 +182,49 @@ function removeEmpty(forward: boolean) {
   };
 }
 
+/** A list item with nothing after its marker (or checkbox). */
+const EMPTY_ITEM = /^(\s*)(?:[-+*]|\d+[.)])(?: \[[ xX]\])?\s*$/;
+
+/**
+ * Enter on an empty list item, as Typora does. A nested item moves out a level; a top-level
+ * one ends the list, and the cursor lands in a new paragraph below it, with separators around
+ * it. The markdown keymap would only remove the marker, leaving a line that continues the
+ * last item. Lists inside quotes are left to the markdown keymap.
+ */
+function endListItem(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty || state.selection.ranges.length > 1) return false;
+  const line = state.doc.lineAt(range.head);
+  const empty = EMPTY_ITEM.exec(line.text);
+  const tree = syntaxTree(state);
+  const block = topBlock(tree, line.from);
+  if (!empty || !block || !/^(Bullet|Ordered)List$/.test(block.name)) return false;
+  const item = tree.resolveInner(line.from + empty[1].length, 1).parent;
+  const parent = item?.name === "ListItem" ? item.parent?.parent : null;
+  let insert: string;
+  if (parent?.name === "ListItem") {
+    const mark = parent.getChild("ListMark");
+    if (!mark) return false;
+    const parentLine = state.doc.lineAt(parent.from);
+    const indent = parentLine.text.slice(0, parent.from - parentLine.from);
+    const number = /^(\d+)([.)])$/.exec(state.sliceDoc(mark.from, mark.to));
+    insert = `${indent}${number ? `${Number(number[1]) + 1}${number[2]}` : state.sliceDoc(mark.from, mark.to)} `;
+  } else {
+    const br = state.lineBreak;
+    const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+    insert = next && next.text.trim() !== "" ? br + br : br;
+  }
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert },
+    // After the marker, or on the new paragraph's line.
+    selection: { anchor: line.from + (parent?.name === "ListItem" ? insert.length : 1) },
+    scrollIntoView: true,
+    userEvent: "input",
+  });
+  return true;
+}
+
 function lineBreak(view: EditorView): boolean {
   view.dispatch(view.state.replaceSelection(view.state.lineBreak), { scrollIntoView: true, userEvent: "input" });
   return true;
@@ -215,7 +258,7 @@ export const blankLines: Extension = [
   // still continues lists and quotes on Enter.
   Prec.highest(
     keymap.of([
-      { key: "Enter", run: newParagraph },
+      { key: "Enter", run: (view) => endListItem(view) || newParagraph(view) },
       { key: "Shift-Enter", run: lineBreak },
       { key: "Backspace", run: (view) => removeEmpty(false)(view) || join(false)(view) },
       { key: "Delete", run: (view) => removeEmpty(true)(view) || join(true)(view) },
