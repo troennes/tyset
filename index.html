@@ -33,6 +33,7 @@
           <span id="mode"></span>
         </span>
         <span class="cluster">
+          <button type="button" class="tertiary small status-button" id="shortcuts-button" title="Keyboard shortcuts (F1)">Shortcuts</button>
           <div class="dropdown" id="export" hidden>
             <button type="button" class="tertiary small status-button" popovertarget="export-menu">Export</button>
             <div id="export-menu" popover>
@@ -60,6 +61,12 @@
           <button id="history-restore" value="restore">Restore this version</button>
         </form>
       </footer>
+      <form method="dialog"><button class="close" aria-label="Close"></button></form>
+    </dialog>
+
+    <dialog id="shortcuts" aria-labelledby="shortcuts-title">
+      <header><strong id="shortcuts-title">Keyboard shortcuts</strong></header>
+      <div class="shortcuts-body"></div>
       <form method="dialog"><button class="close" aria-label="Close"></button></form>
     </dialog>
   </body>

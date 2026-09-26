@@ -38,6 +38,7 @@ import {
 } from "./editor";
 import { printDocument, renderDocument, standaloneHtml, writeExport } from "./export";
 import { HistoryDialog } from "./history";
+import { openShortcuts } from "./shortcuts";
 import { Outline } from "./outline";
 import { baseName, dirName, isAbsolute, resolve } from "./paths";
 import { type Settings, flushSettings, loadSettings, settings, updateSettings } from "./settings";
@@ -512,6 +513,15 @@ async function pickFile(): Promise<void> {
 }
 
 document.getElementById("open-folder")!.addEventListener("click", () => void pickFolder());
+
+document.getElementById("shortcuts-button")!.addEventListener("click", openShortcuts);
+
+// F1 shows the keyboard shortcuts.
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "F1" || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  openShortcuts();
+});
 
 // F2 renames the open document (in the tree, F2 renames the focused entry instead).
 window.addEventListener("keydown", (e) => {

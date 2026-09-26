@@ -221,6 +221,51 @@
     font-size: var(--size-tiny);
   }
 
+  /* Keyboard shortcuts dialog (src/shortcuts.ts). */
+  #shortcuts {
+    width: min(52rem, 90vw);
+  }
+
+  .shortcuts-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-l);
+    font-size: var(--size-small);
+
+    > div {
+      flex: 1 1 18rem;
+    }
+
+    table {
+      width: 100%;
+      margin: 0 0 var(--space-xs);
+    }
+
+    caption {
+      margin: 0;
+      padding-block-end: var(--space-3xs);
+      text-align: start;
+      font-style: normal;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text);
+    }
+
+    td {
+      padding: 0.0625rem 0;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    td + td {
+      text-align: end;
+      color: var(--color-text-muted);
+    }
+
+    kbd {
+      font-size: var(--size-tiny);
+    }
+  }
+
   /* Local history dialog (src/history.ts). */
   #history {
     width: min(60rem, 90vw);
