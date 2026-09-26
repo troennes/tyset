@@ -1,17 +1,19 @@
-// Blank lines between blocks are hidden, as in Typora, where the space between blocks is a
-// margin (preview.ts adds it) rather than an empty line. A blank line with the cursor on it
-// stays visible, so there is somewhere to type; arrow keys and clicks skip the hidden ones.
-// Enter starts a new paragraph (a blank line in the file) and Shift+Enter a line break.
+// Blank lines between blocks, as Typora shows them. Typora has paragraphs, not lines: the
+// space between blocks is a margin (preview.ts adds it), and pressing Enter makes a new,
+// possibly empty, paragraph. In the file, one blank line separates two blocks and is hidden;
+// an empty paragraph is an extra blank line with a separator on each side, so 3 blank lines
+// show one empty paragraph and 5 show two. Arrow keys and clicks skip the hidden separators.
+// Enter starts a new paragraph (two line breaks) and Shift+Enter a line break.
 // Only decorations change here; the commands edit the document as normal keys do.
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, EditorState, Prec, StateField, type Extension } from "@codemirror/state";
+import { EditorSelection, EditorState, type Line, Prec, StateField, type Extension } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
 import type { SyntaxNode, Tree } from "@lezer/common";
 
 import { BOXED } from "./preview";
 
 const hidden = Decoration.replace({});
-/** The blank line being typed on looks like an empty paragraph, with a paragraph's space. */
+/** An empty paragraph, with a paragraph's space. */
 const emptyParagraph = Decoration.line({ class: "cm-block-end" });
 /** Blank lines inside these are part of the content. */
 const LITERAL = new Set(["FencedCode", "CodeBlock", "HTMLBlock", "CommentBlock"]);
@@ -35,10 +37,20 @@ function literal(tree: Tree, pos: number): boolean {
 }
 
 /**
+ * Whether blank line `k` of the run `n..end` is an empty paragraph. Between two blocks the
+ * run starts and ends with a separator; at the end of the document it only starts with one,
+ * and at the start it only ends with one (the first line then shows either way).
+ */
+function isEmptyParagraph(k: number, n: number, end: number, leading: boolean, trailing: boolean): boolean {
+  if (leading) return k === 1 || (end - k) % 2 === 1;
+  return (k - n) % 2 === 1 && (trailing || k < end);
+}
+
+/**
  * Each hidden range runs from the end of the last visible line to the end of the last hidden
- * one, so the blank lines fold into the line above. Runs at the start or end of the document
- * stay, as does the last blank line between two boxed blocks (code, quotes), whose space
- * can't be padding.
+ * one, so the separators fold into the line above. A blank line the cursor is on also shows,
+ * so typing is never invisible. Two boxed blocks (code, quotes) with only a separator between
+ * them keep it as a plain line, since their space can't be padding.
  */
 function build(state: EditorState): DecorationSet {
   const { doc } = state;
@@ -48,20 +60,26 @@ function build(state: EditorState): DecorationSet {
   );
   const blank = (n: number) => doc.line(n).text.trim() === "";
   const ranges = [];
-  for (let n = 2; n < doc.lines; n++) {
+  for (let n = 1; n <= doc.lines; n++) {
     if (!blank(n)) continue;
     let end = n;
     while (end < doc.lines && blank(end + 1)) end++;
-    if (end < doc.lines && !literal(tree, doc.line(n).from)) {
-      const before = topBlock(tree, doc.line(n - 1).from);
-      const after = topBlock(tree, doc.line(end + 1).from);
-      const keepLast = !!before && !!after && BOXED.has(before.name) && BOXED.has(after.name);
+    const leading = n === 1;
+    const trailing = end === doc.lines;
+    if (!(leading && trailing) && !literal(tree, doc.line(n).from)) {
+      const empty = (k: number) => isEmptyParagraph(k, n, end, leading, trailing);
+      let keep = 0;
+      if (!leading && !trailing) {
+        const before = topBlock(tree, doc.line(n - 1).from);
+        const after = topBlock(tree, doc.line(end + 1).from);
+        const boxed = !!before && !!after && BOXED.has(before.name) && BOXED.has(after.name);
+        if (boxed && end - n < 2) keep = end;
+      }
       let shown = n - 1;
       for (let k = n; k <= end; k++) {
-        const typing = cursorLines.has(k);
-        if (!typing && !(keepLast && k === end)) continue;
+        if (!empty(k) && !cursorLines.has(k) && k !== keep) continue;
         if (k - 1 > shown) ranges.push(hidden.range(doc.line(shown).to, doc.line(k - 1).to));
-        if (typing) ranges.push(emptyParagraph.range(doc.line(k).from));
+        if (empty(k)) ranges.push(emptyParagraph.range(doc.line(k).from));
         shown = k;
       }
       if (end > shown) ranges.push(hidden.range(doc.line(shown).to, doc.line(end).to));
@@ -89,6 +107,15 @@ function hiddenAt(state: EditorState, pos: number): { from: number; to: number }
   return found;
 }
 
+/** `line` shows as an empty paragraph. */
+function isEmptyLine(state: EditorState, line: Line): boolean {
+  let found = false;
+  state.field(hiddenBlankLines).between(line.from, line.from, (from, _to, value) => {
+    if (from === line.from && value === emptyParagraph) found = true;
+  });
+  return found;
+}
+
 /**
  * A cursor moved onto hidden lines stops at the end of the visible line above them, where
  * End, a click past the text or Up/Down put it visually. Only stepping forward from that
@@ -103,31 +130,56 @@ const skipHidden = EditorState.transactionFilter.of((tr) => {
     const skip = hiddenAt(tr.startState, range.head);
     if (!skip) return range;
     moved = true;
-    const onward = !pointer && (old.ranges[i] ?? old.main).head === skip.from;
-    const head = onward ? Math.min(skip.to + 1, tr.state.doc.length) : skip.from;
+    // Past the last separator at the end of the document there is nothing to go on to.
+    const onward = !pointer && (old.ranges[i] ?? old.main).head === skip.from && skip.to < tr.state.doc.length;
+    const head = onward ? skip.to + 1 : skip.from;
     return range.empty ? EditorSelection.cursor(head) : EditorSelection.range(range.anchor, head);
   });
   if (!moved) return tr;
   return [tr, { selection: EditorSelection.create(ranges, tr.newSelection.mainIndex), sequential: true }];
 });
 
-/** Enter in a top-level paragraph or heading: start a new paragraph, as Typora does. */
+/**
+ * Enter in a top-level paragraph or heading, or on an empty paragraph: start a new paragraph,
+ * as Typora does. At the start of a paragraph, the new empty one goes above it.
+ */
 function newParagraph(view: EditorView): boolean {
   const { state } = view;
   const range = state.selection.main;
   if (state.selection.ranges.length > 1) return false;
   const block = topBlock(syntaxTree(state), range.from);
-  if (!block || (block.name !== "Paragraph" && !/^ATXHeading/.test(block.name))) return false;
-  const breaks = state.lineBreak + state.lineBreak;
-  // At the very start, the new empty paragraph goes above, with the cursor in it.
-  const atStart = range.empty && range.from === block.from;
+  const inText = !!block && (block.name === "Paragraph" || /^ATXHeading/.test(block.name));
+  if (!inText && !(range.empty && isEmptyLine(state, state.doc.lineAt(range.head)))) return false;
   view.dispatch({
-    changes: { from: range.from, to: range.to, insert: breaks },
-    selection: { anchor: atStart ? range.from : range.from + 2 },
+    changes: { from: range.from, to: range.to, insert: state.lineBreak + state.lineBreak },
+    selection: { anchor: range.from + 2 },
     scrollIntoView: true,
     userEvent: "input",
   });
   return true;
+}
+
+/** Backspace or Delete on an empty paragraph: remove it with its separator. */
+function removeEmpty(forward: boolean) {
+  return (view: EditorView): boolean => {
+    const { state } = view;
+    const range = state.selection.main;
+    if (!range.empty || state.selection.ranges.length > 1) return false;
+    const line = state.doc.lineAt(range.head);
+    if (!isEmptyLine(state, line)) return false;
+    const n = line.number;
+    const blank = (k: number) => state.doc.line(k).text.trim() === "";
+    let changes;
+    if (!forward && n > 2 && blank(n - 1)) changes = { from: state.doc.line(n - 1).from - 1, to: line.from };
+    else if (forward && n + 1 < state.doc.lines && blank(n + 1)) changes = { from: line.to, to: line.to + 2 };
+    else return false;
+    view.dispatch({
+      changes,
+      scrollIntoView: true,
+      userEvent: forward ? "delete.forward" : "delete.backward",
+    });
+    return true;
+  };
 }
 
 function lineBreak(view: EditorView): boolean {
@@ -165,8 +217,8 @@ export const blankLines: Extension = [
     keymap.of([
       { key: "Enter", run: newParagraph },
       { key: "Shift-Enter", run: lineBreak },
-      { key: "Backspace", run: join(false) },
-      { key: "Delete", run: join(true) },
+      { key: "Backspace", run: (view) => removeEmpty(false)(view) || join(false)(view) },
+      { key: "Delete", run: (view) => removeEmpty(true)(view) || join(true)(view) },
     ]),
   ),
 ];

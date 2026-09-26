@@ -115,7 +115,8 @@ Check UI behaviour headlessly as described above.
   attributes; `src/export.css` restores them.
 - Live preview only changes decorations (`src/editor/preview.ts`, `accordion.ts`). It must never
   modify the document. Accordion collapse uses CodeMirror folding, which is view state only.
-- The formatted view hides blank lines between blocks, as Typora does (`src/editor/blanklines.ts`).
-  The space between blocks comes from padding set in `preview.ts`. The cursor skips hidden lines,
-  Enter in a paragraph inserts two line breaks, and Shift+Enter inserts one. When driving the app
-  with xdotool, check `od -c` rather than assuming where a keystroke landed.
+- The formatted view models paragraphs as Typora does (`src/editor/blanklines.ts`). A single
+  blank line between blocks is a hidden separator, and the space comes from padding set in
+  `preview.ts`. Each extra pair of blank lines is a visible empty paragraph. Enter inserts two
+  line breaks and Shift+Enter inserts one. When driving the app with xdotool, check `od -c`
+  rather than assuming where a keystroke landed.
