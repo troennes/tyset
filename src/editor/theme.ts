@@ -45,6 +45,18 @@ const alertColours = {
 const richStyles = EditorView.theme({
   ".cm-scroller": { fontFamily: "var(--font)", fontSize: "var(--size-body)" },
   ".cm-line.cm-codeblock": { fontSize: "var(--font-mono-size)", paddingInline: "var(--space-xs)" },
+  // minium's `pre` radius, on the outer corners of the block's first and last line. Its inner
+  // shadow falls along the top edge only, so the first line carries it; on every line it
+  // would repeat as a band per line.
+  ".cm-line.cm-codeblock-first": {
+    borderStartStartRadius: "var(--border-radius-m)",
+    borderStartEndRadius: "var(--border-radius-m)",
+    boxShadow: "var(--shadow-inner)",
+  },
+  ".cm-line.cm-codeblock-last": {
+    borderEndStartRadius: "var(--border-radius-m)",
+    borderEndEndRadius: "var(--border-radius-m)",
+  },
   ".cm-code-language": {
     float: "right",
     fontFamily: "var(--font)",
@@ -58,11 +70,20 @@ const richStyles = EditorView.theme({
   ".cm-link-text": {
     color: "var(--color-primary-text)",
     textDecoration: "underline",
+    // minium's link underline, but without the bold weight.
+    textDecorationThickness: "var(--text-decoration-thickness)",
+    textDecorationColor: "var(--color-primary)",
     textUnderlineOffset: "var(--text-underline-offset)",
   },
   // Set by the live preview on inline code only, not on the text of fences without a language
   // (both are tagged monospace).
-  ".cm-inline-code": { backgroundColor: "var(--color-fill-hover)", borderRadius: "var(--border-radius-s)" },
+  // Padding matches minium's inline `code`.
+  ".cm-inline-code": {
+    backgroundColor: "var(--color-fill-hover)",
+    borderRadius: "var(--border-radius-s)",
+    boxDecorationBreak: "clone",
+    padding: "0.125rem 0.375rem",
+  },
   ".cm-bullet": { display: "inline-block", width: "1ch", color: "var(--color-text-muted)" },
   ".cm-task": { margin: "0 0.4em 0 0", verticalAlign: "-0.1em", cursor: "pointer" },
 
