@@ -21,6 +21,7 @@ const bullet = Decoration.replace({ widget: new BulletWidget() });
 const checked = Decoration.replace({ widget: new CheckboxWidget(true) });
 const unchecked = Decoration.replace({ widget: new CheckboxWidget(false) });
 const hrLine = Decoration.line({ class: "cm-hr" });
+const headingLine = Decoration.line({ class: "cm-heading" });
 
 const INLINE_MARKS: Record<string, string> = {
   Emphasis: "EmphasisMark",
@@ -96,6 +97,7 @@ class Builder {
     }
     if (/^ATXHeading/.test(name)) return this.heading(node);
     if (/^SetextHeading/.test(name)) {
+      this.headingSpace(node);
       const underline = node.getChild("HeaderMark");
       if (underline && !this.onLines(node.from, node.to)) this.hide(underline.from, underline.to);
       return true;
@@ -140,7 +142,13 @@ class Builder {
     return true;
   }
 
+  /** Space below a heading's last line, whether or not its syntax is showing. */
+  private headingSpace(node: SyntaxNode): void {
+    if (node.to >= this.from && node.to <= this.to) this.add(headingLine, this.state.doc.lineAt(node.to).from);
+  }
+
   private heading(node: SyntaxNode): boolean {
+    this.headingSpace(node);
     if (this.onLines(node.from, node.to)) return true;
     for (const mark of node.getChildren("HeaderMark")) {
       if (mark.from === node.from) {

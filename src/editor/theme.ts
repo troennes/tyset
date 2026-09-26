@@ -52,6 +52,9 @@ const richStyles = EditorView.theme({
     color: "var(--color-text-muted)",
   },
 
+  // Padding, not margin: CodeMirror measures lines without their margins.
+  ".cm-line.cm-heading": { paddingBottom: "1em" },
+
   ".cm-link-text": { textDecoration: "underline", textUnderlineOffset: "var(--text-underline-offset)" },
   ".cm-bullet": { display: "inline-block", width: "1ch", color: "var(--color-text-muted)" },
   ".cm-task": { margin: "0 0.4em 0 0", verticalAlign: "-0.1em", cursor: "pointer" },
