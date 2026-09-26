@@ -55,7 +55,14 @@ const richStyles = EditorView.theme({
   // Padding, not margin: CodeMirror measures lines without their margins.
   ".cm-line.cm-heading": { paddingBottom: "1em" },
 
-  ".cm-link-text": { textDecoration: "underline", textUnderlineOffset: "var(--text-underline-offset)" },
+  ".cm-link-text": {
+    color: "var(--color-primary-text)",
+    textDecoration: "underline",
+    textUnderlineOffset: "var(--text-underline-offset)",
+  },
+  // Set by the live preview on inline code only, not on the text of fences without a language
+  // (both are tagged monospace).
+  ".cm-inline-code": { backgroundColor: "var(--color-fill-hover)", borderRadius: "var(--border-radius-s)" },
   ".cm-bullet": { display: "inline-block", width: "1ch", color: "var(--color-text-muted)" },
   ".cm-task": { margin: "0 0.4em 0 0", verticalAlign: "-0.1em", cursor: "pointer" },
 
@@ -185,7 +192,7 @@ const markdownColours = [
   { tag: t.strong, fontWeight: "var(--font-weight-bold)" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: [t.link, t.url], color: "var(--color-primary-text)" },
+  { tag: t.url, color: "var(--color-primary-text)" },
   { tag: t.quote, color: "var(--color-text-muted)" },
   { tag: [t.processingInstruction, t.contentSeparator, t.labelName], color: "var(--color-text-muted)" },
   { tag: t.atom, color: "var(--color-accent-text)" },
@@ -212,13 +219,12 @@ const richHighlight = HighlightStyle.define([
     tag: t.monospace,
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-mono-size)",
-    backgroundColor: "var(--color-fill-hover)",
-    borderRadius: "var(--border-radius-s)",
   },
 ]);
 
 const sourceHighlight = HighlightStyle.define([
   ...markdownColours,
+  { tag: t.link, color: "var(--color-primary-text)" },
   { tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6], fontWeight: "var(--font-weight-bold)" },
 ]);
 

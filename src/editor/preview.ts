@@ -7,6 +7,7 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import type { SyntaxNode } from "@lezer/common";
 
 import type { EditorHost } from "./host";
+import { destination } from "./links";
 import {
   type AlertKind,
   AlertLabelWidget,
@@ -22,6 +23,7 @@ const checked = Decoration.replace({ widget: new CheckboxWidget(true) });
 const unchecked = Decoration.replace({ widget: new CheckboxWidget(false) });
 const hrLine = Decoration.line({ class: "cm-hr" });
 const headingLine = Decoration.line({ class: "cm-heading" });
+const inlineCode = Decoration.mark({ class: "cm-inline-code" });
 
 const INLINE_MARKS: Record<string, string> = {
   Emphasis: "EmphasisMark",
@@ -90,6 +92,7 @@ class Builder {
   node(node: SyntaxNode): boolean {
     const { name } = node;
     if (name in INLINE_MARKS) {
+      if (name === "InlineCode") this.add(inlineCode, node.from, node.to);
       if (!this.touches(node.from, node.to)) {
         for (const mark of node.getChildren(INLINE_MARKS[name])) this.hide(mark.from, mark.to);
       }
@@ -164,15 +167,19 @@ class Builder {
 
   private link(node: SyntaxNode): boolean {
     const marks = node.getChildren("LinkMark");
-    if (marks.length < 2 || this.touches(node.from, node.to)) return true;
-    // Show only the link text: hide "[" and everything from "]" on.
+    // The parser reads any "[text]" as a shortcut reference link; without a
+    // matching "[text]: url" definition it is plain text.
+    const href = destination(this.state, node);
+    if (marks.length < 2 || !href) return true;
     const [open, close] = marks;
-    this.hide(open.from, open.to);
-    this.hide(close.from, node.to);
-    const url = this.text(node.getChild("URL"));
     if (close.from > open.to) {
-      const title = url ? `${url} (Ctrl+click to open)` : "Ctrl+click to open";
+      const title = `${href} (Ctrl+click to open)`;
       this.add(Decoration.mark({ class: "cm-link-text", attributes: { title } }), open.to, close.from);
+    }
+    // Show only the link text: hide "[" and everything from "]" on.
+    if (!this.touches(node.from, node.to)) {
+      this.hide(open.from, open.to);
+      this.hide(close.from, node.to);
     }
     return true;
   }

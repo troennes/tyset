@@ -20,7 +20,8 @@ export function linkAt(state: EditorState, pos: number): string | null {
   return null;
 }
 
-function destination(state: EditorState, link: SyntaxNode): string | null {
+/** Where a Link node points, or null for a "[reference]" that nothing defines. */
+export function destination(state: EditorState, link: SyntaxNode): string | null {
   const url = link.getChild("URL");
   if (url) return state.sliceDoc(url.from, url.to).replace(/^<|>$/g, "");
   // Reference link: [text][label] or [label]. Look up `[label]: url`.
