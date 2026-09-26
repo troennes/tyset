@@ -27,6 +27,7 @@ const afterBlock = Decoration.line({ class: "cm-after-block" });
 const inlineCode = Decoration.mark({ class: "cm-inline-code" });
 const alertFirst = Decoration.line({ class: "cm-alert-first" });
 const alertLast = Decoration.line({ class: "cm-alert-last" });
+const listIndent = Decoration.mark({ class: "cm-list-indent" });
 
 const INLINE_MARKS: Record<string, string> = {
   Emphasis: "EmphasisMark",
@@ -129,6 +130,10 @@ class Builder {
         return false;
       case "Image":
         return this.image(node);
+      case "BulletList":
+      case "OrderedList":
+        if (node.parent?.name !== "ListItem") this.listIndents(node);
+        return true;
       case "ListMark":
         return this.listMark(node);
       case "TaskMarker":
@@ -230,14 +235,40 @@ class Builder {
     return false;
   }
 
+  /**
+   * Widen the leading spaces of each line in a list, so nesting shows clearly in the
+   * proportional font. Inside a code block only the list's own indentation is widened.
+   */
+  private listIndents(list: SyntaxNode): void {
+    const { doc } = this.state;
+    const tree = syntaxTree(this.state);
+    const first = doc.lineAt(Math.max(list.from, this.from)).number;
+    const last = doc.lineAt(Math.min(list.to, this.to)).number;
+    for (let n = first; n <= last; n++) {
+      const line = doc.line(n);
+      let end = line.from + /^ */.exec(line.text)![0].length;
+      if (end === line.from) continue;
+      for (let at: SyntaxNode | null = tree.resolveInner(end, 1); at; at = at.parent) {
+        if (at.name === "FencedCode" || at.name === "CodeBlock") {
+          if (at.from < line.from) end = Math.min(end, line.from + (at.from - doc.lineAt(at.from).from));
+          break;
+        }
+      }
+      if (end > line.from) this.add(listIndent, line.from, end);
+    }
+  }
+
   private listMark(node: SyntaxNode): boolean {
     const item = node.parent;
     if (item?.getChild("Task")) {
       // The checkbox stands in for the bullet: hide "- ".
       const end = node.to + this.space(node.to);
       if (!this.inside(node.from, end)) this.hide(node.from, end);
-    } else if (item?.parent?.name === "BulletList" && !this.inside(node.from, node.to)) {
-      this.add(bullet, node.from, node.to);
+    } else if (item?.parent?.name === "BulletList") {
+      // The bullet takes "- " as a whole, one indent step wide, so nested items and
+      // continuation lines line up with the text.
+      const end = node.to + this.space(node.to);
+      if (!this.inside(node.from, end)) this.add(bullet, node.from, end);
     }
     return false;
   }

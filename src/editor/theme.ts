@@ -80,7 +80,10 @@ const richStyles = EditorView.theme({
     boxDecorationBreak: "clone",
     padding: "0.125rem 0.375rem",
   },
-  ".cm-bullet": { display: "inline-block", width: "1ch", color: "var(--color-text-muted)" },
+  // Leading spaces in a list: monospace so each is a fixed width, widened to 0.75em, making
+  // the two-space indent of a nested item as wide as its parent's bullet.
+  ".cm-list-indent": { fontFamily: "var(--font-mono)", wordSpacing: "calc(0.75em - 1ch)" },
+  ".cm-bullet": { display: "inline-block", width: "1.5em", color: "var(--color-text-muted)" },
   ".cm-task": { margin: "0 0.4em 0 0", verticalAlign: "-0.1em", cursor: "pointer" },
 
   ".cm-line.cm-quote": {

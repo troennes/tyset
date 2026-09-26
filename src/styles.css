@@ -5,6 +5,11 @@
 @import "./export.css";
 
 @layer project {
+  /* A little wider than minium's 68ch reading measure. */
+  :root {
+    --content-width: 76ch;
+  }
+
   html,
   body {
     height: 100%;
