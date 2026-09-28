@@ -70,7 +70,7 @@
         "type": "downloadBootstrapper"
       },
       "nsis": {
-        "installMode": "currentUser",
+        "installMode": "both",
         "startMenuFolder": "Tyset"
       }
     },
