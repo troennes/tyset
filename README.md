@@ -32,6 +32,20 @@ npm test                      # frontend unit tests (Vitest)
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+Rustup puts `cargo` in `~/.cargo/bin`; open a new shell (or `source ~/.cargo/env`) so it's on
+your `PATH`.
+
+### Headless GUI testing
+
+To check the UI over SSH without a display (see `CLAUDE.md`), you also need a virtual X
+server and tools to drive it, take screenshots, set the keyboard layout and use the clipboard.
+Ghostscript renders printed PDFs, and the WebKit bindings for Python open exported HTML:
+
+```bash
+sudo apt install xvfb xdotool imagemagick xsel x11-xkb-utils ghostscript \
+  python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+```
+
 ## Releases
 
 CI (`.github/workflows/build.yml`) tests and builds both installers on every push.

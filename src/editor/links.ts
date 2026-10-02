@@ -1,7 +1,7 @@
 // Ctrl+click opens links; pasting an image stores it beside the document.
 import { syntaxTree } from "@codemirror/language";
-import type { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import type { EditorState, Extension } from "@codemirror/state";
+import { EditorView, ViewPlugin } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 
 import type { EditorHost } from "./host";
@@ -12,13 +12,21 @@ export function linkAt(state: EditorState, pos: number): string | null {
   for (const side of [1, -1] as const) {
     for (let node: SyntaxNode | null = tree.resolveInner(pos, side); node; node = node.parent) {
       if (node.name === "URL" && node.parent?.name !== "Link" && node.parent?.name !== "Image") {
-        return state.sliceDoc(node.from, node.to); // bare URL or <autolink>
+        return autolinkHref(state.sliceDoc(node.from, node.to)); // bare URL or <autolink>
       }
       if (node.name === "Link") return destination(state, node);
     }
   }
   return null;
 }
+
+/** Where an autolink's text points: a bare email address gets "mailto:". */
+export function autolinkHref(text: string): string {
+  return /^[^\s@/:]+@[^\s@/]+$/.test(text) ? `mailto:${text}` : text;
+}
+
+/** Tooltip on rendered links. */
+export const linkTitle = (href: string) => `${href} (Ctrl+click to open)`;
 
 /** Where a Link node points, or null for a "[reference]" that nothing defines. */
 export function destination(state: EditorState, link: SyntaxNode): string | null {
@@ -38,7 +46,35 @@ export function destination(state: EditorState, link: SyntaxNode): string | null
   return definition?.[1] ?? null;
 }
 
-export function interactions(host: EditorHost) {
+/**
+ * Puts `cm-ctrl-held` on the editor while Ctrl (Cmd) is down, so links show the pointer
+ * only when a click would open them.
+ */
+const ctrlHeld = ViewPlugin.define((view) => {
+  const set = (held: boolean) => view.dom.classList.toggle("cm-ctrl-held", held);
+  const sync = (e: KeyboardEvent | MouseEvent) => set(e.ctrlKey || e.metaKey);
+  // WebKitGTK still reports ctrlKey on the Control key's own keyup.
+  const keyup = (e: KeyboardEvent) => (e.key === "Control" || e.key === "Meta" ? set(false) : sync(e));
+  const release = () => set(false);
+  window.addEventListener("keydown", sync, true);
+  window.addEventListener("keyup", keyup, true);
+  window.addEventListener("mousemove", sync, true);
+  window.addEventListener("blur", release);
+  return {
+    destroy() {
+      window.removeEventListener("keydown", sync, true);
+      window.removeEventListener("keyup", keyup, true);
+      window.removeEventListener("mousemove", sync, true);
+      window.removeEventListener("blur", release);
+    },
+  };
+});
+
+export function interactions(host: EditorHost): Extension {
+  return [ctrlHeld, handlers(host)];
+}
+
+function handlers(host: EditorHost) {
   return EditorView.domEventHandlers({
     mousedown(event, view) {
       if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;

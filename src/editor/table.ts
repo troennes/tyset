@@ -6,6 +6,7 @@ import { type EditorState, type Extension, Prec, RangeSetBuilder, StateField } f
 import { Decoration, type DecorationSet, EditorView, WidgetType, keymap } from "@codemirror/view";
 
 import type { EditorHost } from "./host";
+import { autolinkHref, linkTitle } from "./links";
 import {
   type Align,
   type Table,
@@ -191,18 +192,35 @@ function cellElement(tag: "th" | "td", text: string, row: number, column: number
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/** [text](url), <autolink>, bare URL (GFM drops trailing punctuation) or bare email. */
+const CELL_LINK =
+  /\[([^\]]+)\]\(([^)\s]+)\)|<((?:https?|mailto):[^\s<>]+|[^\s<>@]+@[^\s<>@]+)>|((?:https?:\/\/|www\.)[^\s<]*[^\s<?!.,:*_~'")\]]|[\w.+-]+@[\w-]+(?:\.[\w-]+)+)/gi;
+
+const formatInline = (s: string) =>
+  escapeHtml(s)
+    .replace(/(\*\*|__)(?=\S)(.+?)\1/g, "<strong>$2</strong>")
+    .replace(/(\*|_)(?=\S)(.+?)\1/g, "<em>$2</em>")
+    .replace(/~~(.+?)~~/g, "<del>$1</del>");
+
+/** Inline markdown with links. Links are swapped out first so emphasis can't reach into a URL. */
+function formatWithLinks(s: string): string {
+  const links: string[] = [];
+  const text = s.replace(CELL_LINK, (_, label?: string, url?: string, auto?: string, bare?: string) => {
+    const href = url ?? autolinkHref(auto ?? bare!);
+    const attr = escapeHtml(href);
+    const content = label === undefined ? escapeHtml(auto ?? bare!) : formatInline(label);
+    // No real href: WebKit would also navigate on Ctrl+click, opening the link twice.
+    links.push(`<a data-href="${attr}" title="${escapeHtml(linkTitle(href))}">${content}</a>`);
+    return `\0${links.length - 1}\0`;
+  });
+  return formatInline(text).replace(/\0(\d+)\0/g, (_, i: string) => links[Number(i)]);
+}
+
 /** Minimal inline markdown for cells that aren't being edited. */
 export function renderInline(markdown: string): string {
   return unescapeCell(markdown)
     .split(/(`[^`]+`)/)
-    .map((part, i) => {
-      if (i % 2 === 1) return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
-      return escapeHtml(part)
-        .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" data-href="$2">$1</a>')
-        .replace(/(\*\*|__)(?=\S)(.+?)\1/g, "<strong>$2</strong>")
-        .replace(/(\*|_)(?=\S)(.+?)\1/g, "<em>$2</em>")
-        .replace(/~~(.+?)~~/g, "<del>$1</del>");
-    })
+    .map((part, i) => (i % 2 === 1 ? `<code>${escapeHtml(part.slice(1, -1))}</code>` : formatWithLinks(part)))
     .join("");
 }
 

@@ -8,7 +8,7 @@ import type { SyntaxNode } from "@lezer/common";
 
 import { ALERT_TITLE, type AlertKind } from "../alerts";
 import type { EditorHost } from "./host";
-import { destination } from "./links";
+import { autolinkHref, destination, linkTitle } from "./links";
 import {
   AlertLabelWidget,
   BulletWidget,
@@ -127,6 +127,13 @@ class Builder {
         if (!this.touches(node.from, node.to)) {
           for (const mark of node.getChildren("LinkMark")) this.hide(mark.from, mark.to);
         }
+        return true;
+      case "URL":
+        // Bare URLs, <autolinks> and reference definitions; a Link's own URL is hidden.
+        if (node.parent?.name !== "Link") {
+          const title = linkTitle(autolinkHref(this.text(node)));
+          this.add(Decoration.mark({ class: "cm-link-text", attributes: { title } }), node.from, node.to);
+        }
         return false;
       case "Image":
         return this.image(node);
@@ -209,7 +216,7 @@ class Builder {
     if (marks.length < 2 || !href) return true;
     const [open, close] = marks;
     if (close.from > open.to) {
-      const title = `${href} (Ctrl+click to open)`;
+      const title = linkTitle(href);
       this.add(Decoration.mark({ class: "cm-link-text", attributes: { title } }), open.to, close.from);
     }
     // Show only the link text: hide "[" and everything from "]" on.

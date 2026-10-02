@@ -37,7 +37,18 @@ describe("renderInline", () => {
     expect(renderInline("**b** *i* `c*` ~~s~~ <x>")).toBe(
       "<strong>b</strong> <em>i</em> <code>c*</code> <del>s</del> &lt;x&gt;",
     );
-    expect(renderInline("[t](https://a.b)")).toBe('<a href="https://a.b" data-href="https://a.b">t</a>');
+    expect(renderInline("[t](https://a.b)")).toBe(
+      '<a data-href="https://a.b" title="https://a.b (Ctrl+click to open)">t</a>',
+    );
     expect(renderInline("a \\| b")).toBe("a | b");
+  });
+
+  it("links bare URLs, autolinks and emails", () => {
+    const hrefs = (md: string) => [...renderInline(md).matchAll(/data-href="([^"]*)"/g)].map((m) => m[1]);
+    expect(hrefs("see https://a.b/c_d_e, www.x.org.")).toEqual(["https://a.b/c_d_e", "www.x.org"]);
+    expect(hrefs("<https://q.io> me@z.no <you@y.no>")).toEqual(["https://q.io", "mailto:me@z.no", "mailto:you@y.no"]);
+    expect(hrefs("`https://in.code`")).toEqual([]);
+    expect(hrefs("https://a.b?x=1&y=2")).toEqual(["https://a.b?x=1&amp;y=2"]);
+    expect(renderInline("**see [x](https://a.b)**")).toMatch(/^<strong>see <a [^>]+>x<\/a><\/strong>$/);
   });
 });

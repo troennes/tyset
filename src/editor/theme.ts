@@ -63,14 +63,18 @@ const richStyles = EditorView.theme({
   ".cm-line.cm-block-end": { paddingBottom: "1em" },
   ".cm-line.cm-after-block": { paddingTop: "1em" },
 
-  ".cm-link-text": {
+  ".cm-link-text, .cm-table a[data-href]": {
     color: "var(--color-primary-text)",
+    fontWeight: "inherit",
     textDecoration: "underline",
     // minium's link underline, but without the bold weight.
     textDecorationThickness: "var(--text-decoration-thickness)",
     textDecorationColor: "var(--color-primary)",
     textUnderlineOffset: "var(--text-underline-offset)",
   },
+  // Links open on Ctrl+click only, so they show the pointer only while Ctrl is held (links.ts).
+  ".cm-table a[data-href]": { cursor: "text" },
+  "&.cm-ctrl-held .cm-link-text, &.cm-ctrl-held .cm-table a[data-href]": { cursor: "pointer" },
   // Set by the live preview on inline code only, not on the text of fences without a language
   // (both are tagged monospace).
   // Padding matches minium's inline `code`.
