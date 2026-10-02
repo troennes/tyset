@@ -51,9 +51,40 @@
       padding: var(--space-2xs) var(--space-xs);
 
       strong {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: var(--space-3xs);
+        min-width: 0;
+
+        &[hidden] {
+          display: none;
+        }
+
+        .icon {
+          flex: none;
+          color: var(--color-text-muted);
+        }
+
+        span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      /* New and Open stay on the right, even when no folder name is shown. */
+      .sidebar-actions {
+        display: flex;
+        flex: none;
+        margin-inline-start: auto;
+      }
+
+      .icon-only {
+        color: var(--color-text-muted);
+
+        &:is(:hover, :focus-visible) {
+          color: var(--color-text);
+        }
       }
     }
 

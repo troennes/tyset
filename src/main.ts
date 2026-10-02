@@ -64,6 +64,7 @@ const BLANK_WINDOW = new URLSearchParams(location.search).has("blank");
 const appWindow = getCurrentWindow();
 const shell = document.querySelector<HTMLElement>(".shell")!;
 const folderName = document.getElementById("folder-name")!;
+const folderNameText = folderName.querySelector("span")!;
 const status = document.getElementById("save-state")!;
 const modeLabel = document.getElementById("mode")!;
 const themeButton = document.getElementById("theme-toggle") as HTMLButtonElement;
@@ -116,8 +117,9 @@ const history = new HistoryDialog((text) => {
 /** `remember` adds it to the recent folders: only for folders the user chose. */
 async function openFolder(path: string, remember = false): Promise<void> {
   folder = path;
-  folderName.textContent = baseName(path);
+  folderNameText.textContent = baseName(path);
   folderName.title = path;
+  folderName.hidden = false;
   lastTreeJson = "";
   await refreshTree();
   await watchFolder(path);
@@ -583,6 +585,8 @@ async function openRecent(key: RecentKey, path: string): Promise<void> {
   if (key === "recentFolders") await openFolder(path, true);
   else await openFile(path, { recent: true, showFolder: true });
 }
+
+document.getElementById("new-button")!.addEventListener("click", () => void newFile());
 
 openMenu.addEventListener("beforetoggle", (e) => {
   if ((e as ToggleEvent).newState === "open") void renderRecent();
