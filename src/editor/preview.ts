@@ -16,6 +16,7 @@ import {
   CodeLanguageWidget,
   ImageWidget,
 } from "./widgets";
+import { isOuterList, listLines, wrapIndentLine } from "./wrapindent";
 
 const hidden = Decoration.replace({});
 const bullet = Decoration.replace({ widget: new BulletWidget() });
@@ -139,7 +140,7 @@ class Builder {
         return this.image(node);
       case "BulletList":
       case "OrderedList":
-        if (node.parent?.name !== "ListItem") this.listIndents(node);
+        if (isOuterList(node)) this.listIndents(node);
         return true;
       case "ListMark":
         return this.listMark(node);
@@ -244,25 +245,15 @@ class Builder {
 
   /**
    * Widen the leading spaces of each line in a list, so nesting shows clearly in the
-   * proportional font. Inside a code block only the list's own indentation is widened.
+   * proportional font, and wrap the line at that indent. Each widened space is 0.75em
+   * (`.cm-list-indent` in theme.ts).
    */
   private listIndents(list: SyntaxNode): void {
-    const { doc } = this.state;
-    const tree = syntaxTree(this.state);
-    const first = doc.lineAt(Math.max(list.from, this.from)).number;
-    const last = doc.lineAt(Math.min(list.to, this.to)).number;
-    for (let n = first; n <= last; n++) {
-      const line = doc.line(n);
-      let end = line.from + /^ */.exec(line.text)![0].length;
-      if (end === line.from) continue;
-      for (let at: SyntaxNode | null = tree.resolveInner(end, 1); at; at = at.parent) {
-        if (at.name === "FencedCode" || at.name === "CodeBlock") {
-          if (at.from < line.from) end = Math.min(end, line.from + (at.from - doc.lineAt(at.from).from));
-          break;
-        }
-      }
-      if (end > line.from) this.add(listIndent, line.from, end);
-    }
+    listLines(this.state, list, this.from, this.to, (line, start, end) => {
+      if (end === start) return;
+      this.add(listIndent, start, end);
+      this.add(wrapIndentLine(`${(end - start) * 0.75}em`), line.from);
+    });
   }
 
   private listMark(node: SyntaxNode): boolean {

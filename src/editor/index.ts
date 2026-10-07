@@ -26,6 +26,7 @@ import { livePreview } from "./preview";
 import { findReplace } from "./search";
 import { insertTable, tableGrid, tableState } from "./table";
 import { baseTheme, richTheme, sourceTheme } from "./theme";
+import { sourceWrapIndent } from "./wrapindent";
 
 export type { EditorHost } from "./host";
 export { insertImage } from "./links";
@@ -84,7 +85,7 @@ export function setSourceMode(view: EditorView, host: EditorHost, on: boolean): 
 }
 
 function modeExtensions(host: EditorHost): Extension {
-  return inSourceMode ? sourceTheme : [richTheme, livePreview(host), blankLines, alertBoxes, accordionPreview, tableGrid(host)];
+  return inSourceMode ? [sourceTheme, sourceWrapIndent] : [richTheme, livePreview(host), blankLines, alertBoxes, accordionPreview, tableGrid(host)];
 }
 
 function newState(text: string, host: EditorHost): EditorState {

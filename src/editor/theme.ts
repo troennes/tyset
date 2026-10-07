@@ -20,7 +20,11 @@ const base = EditorView.theme({
     padding: "var(--space-l) var(--space-m)",
     caretColor: "var(--color-text)",
   },
-  ".cm-line": { padding: "0" },
+  // Wrapped lines in a list keep the line's indent (wrapindent.ts): a hanging indent of
+  // --wrap-indent. Every rule that pads the start of a line adds it.
+  ".cm-line": { padding: "0", paddingInlineStart: "var(--wrap-indent, 0px)" },
+  ".cm-line.cm-wrap-indent": { textIndent: "calc(-1 * var(--wrap-indent))" },
+  ".cm-line.cm-wrap-indent *": { textIndent: "0" },
   ".cm-cursor": { borderLeftColor: "var(--color-text)" },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground": {
     backgroundColor: "var(--color-primary-fill-active)",
@@ -38,7 +42,11 @@ const base = EditorView.theme({
 /** Formatted view with live preview: proportional type, sized headings, widgets. */
 const richStyles = EditorView.theme({
   ".cm-scroller": { fontFamily: "var(--font)", fontSize: "var(--size-body)" },
-  ".cm-line.cm-codeblock": { fontSize: "var(--font-mono-size)", paddingInline: "var(--space-xs)" },
+  ".cm-line.cm-codeblock": {
+    fontSize: "var(--font-mono-size)",
+    paddingInline: "var(--space-xs)",
+    paddingInlineStart: "calc(var(--space-xs) + var(--wrap-indent, 0px))",
+  },
   // minium's `pre` radius, on the outer corners of the block's first and last line. Its inner
   // shadow falls along the top edge only, so the first line carries it; on every line it
   // would repeat as a band per line.
@@ -92,7 +100,7 @@ const richStyles = EditorView.theme({
 
   ".cm-line.cm-quote": {
     borderInlineStart: "3px solid var(--color-border-strong)",
-    paddingInlineStart: "var(--space-s)",
+    paddingInlineStart: "calc(var(--space-s) + var(--wrap-indent, 0px))",
     color: "var(--color-text-muted)",
   },
   // The box around each alert (fill, border, radius, shadow) is drawn behind its lines by
@@ -103,7 +111,10 @@ const richStyles = EditorView.theme({
     border: "var(--border-width) solid",
     boxShadow: "var(--shadow-medium)",
   },
-  ".cm-line.cm-alert": { paddingInline: "var(--space-s-m)" },
+  ".cm-line.cm-alert": {
+    paddingInline: "var(--space-s-m)",
+    paddingInlineStart: "calc(var(--space-s-m) + var(--wrap-indent, 0px))",
+  },
   ".cm-line.cm-alert-first": { paddingTop: "var(--space-s-m)" },
   ".cm-line.cm-alert-last": { paddingBottom: "var(--space-s-m)" },
   ...Object.fromEntries(
@@ -254,7 +265,7 @@ const richStyles = EditorView.theme({
   ".cm-accordion-folded": { marginInlineStart: "0.5em", color: "var(--color-text-muted)", cursor: "pointer" },
   // One indent guide per nesting level.
   ".cm-line.cm-accordion-body": {
-    paddingInlineStart: "calc(var(--accordion-depth) * 1rem)",
+    paddingInlineStart: "calc(var(--accordion-depth) * 1rem + var(--wrap-indent, 0px))",
     backgroundImage:
       "repeating-linear-gradient(to right, var(--color-border-weak) 0 2px, transparent 2px 1rem)",
     backgroundSize: "calc(var(--accordion-depth) * 1rem) 100%",
